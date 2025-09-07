@@ -16,8 +16,8 @@ import { LinearGradient } from "expo-linear-gradient"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 
-const router = useRouter()
 export default function SonsApplication() {
+  const router = useRouter()
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
