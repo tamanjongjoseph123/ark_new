@@ -1,0 +1,11 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.j.f.s.n.ark_of_God",
+      "sha256_cert_fingerprints":
+        ["16:EA:A6:40:8E:58:B4:1E:D6:56:5B:4C:F8:2F:E0:94:75:6A:65:A4:D4:4E:11:60:31:57:75:15:31:8C:53:45"]
+    }
+  }
+]

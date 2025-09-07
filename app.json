@@ -1,0 +1,78 @@
+{
+  "expo": {
+    "name": "Ark of God TV",
+    "slug": "Client",
+    "version": "1.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/ark.png",
+    "splash": {
+      "image": "./assets/images/ark.png",
+      "imageWidth": 200,
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "scheme": "myapp",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": false,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.jfsn.arkofgod",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        },
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "This app uses the camera to allow you to record videos for testimonies.",
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photos to let you select videos for testimonies."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/ark.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.jfsn.arkofgod",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/images/ark.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app needs access to your photos to let you select videos for testimonies.",
+          "cameraPermission": "The app needs access to your camera to record videos for testimonies."
+        }
+      ],
+      "expo-av",
+      [
+        "react-native-video",
+        {
+          "androidExoPlayerVersion": "2.19.1"
+        }
+      ],
+      "expo-video"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "owner": "halaxoft",
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "340de50d-477f-40d8-b8a7-a6a1a0dd33f6"
+      }
+    }
+  }
+}
