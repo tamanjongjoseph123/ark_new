@@ -122,8 +122,7 @@ export default function Worship() {
             <TouchableOpacity
               key={song.id}
               style={styles.songCard}
-              // onPress={() => handleOpenURL(song.youtube_url)}
-              onPress={() => handleVideoPress(video)}
+              onPress={() => handleVideoPress(song)}
             >
               {thumbnailUri ? (
                 <Image

@@ -30,16 +30,34 @@ export default function Events() {
     country: "",
     phone: "",
   })
+  const [activeTab, setActiveTab] = useState('upcoming') // 'upcoming' | 'past'
 
   useEffect(() => {
-    fetchEvents()
-  }, [])
+    fetchEvents(activeTab)
+  }, [activeTab])
 
-  const fetchEvents = async () => {
+  const toImageUrl = (url) => {
+    if (!url) return ''
+    if (/^https?:\/\//i.test(url)) return url
+    return `${BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`
+  }
+
+  const fetchEvents = async (status = 'upcoming') => {
     try {
       const response = await fetch(`${BASE_URL}/api/upcoming-events/`)
       if (!response.ok) throw new Error("Failed to fetch events")
-      const data = await response.json()
+      let data = await response.json()
+      if (status === 'upcoming') {
+        data = data.filter((e) => (e.event_status || '').toLowerCase() === 'upcoming')
+        // soonest first
+        data.sort((a,b) => new Date(a.event_date) - new Date(b.event_date))
+      } else {
+        data = data.filter((e) => (e.event_status || '').toLowerCase() === 'past')
+        // most recent past first
+        data.sort((a,b) => new Date(b.event_date) - new Date(a.event_date))
+      }
+      // normalize image
+      data = data.map(e => ({ ...e, image: toImageUrl(e.image) }))
       setEvents(data)
     } catch (err) {
       setError(err.message)
@@ -89,7 +107,7 @@ export default function Events() {
     return (
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={fetchEvents}>
+        <TouchableOpacity style={styles.retryButton} onPress={() => { setIsLoading(true); fetchEvents(activeTab); }}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
       </View>
@@ -98,10 +116,26 @@ export default function Events() {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView}>
+      {/* Tabs */}
+      <View style={styles.tabBar}>
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === 'upcoming' && styles.tabItemActive]}
+          onPress={() => { setIsLoading(true); setActiveTab('upcoming') }}
+        >
+          <Text style={[styles.tabText, activeTab === 'upcoming' && styles.tabTextActive]}>Upcoming</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === 'past' && styles.tabItemActive]}
+          onPress={() => { setIsLoading(true); setActiveTab('past') }}
+        >
+          <Text style={[styles.tabText, activeTab === 'past' && styles.tabTextActive]}>Past</Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={styles.scrollView} contentContainerStyle={{ paddingBottom: 24 }}>
         {events.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No upcoming events at the moment.</Text>
+            <Text style={styles.emptyText}>No {activeTab === 'upcoming' ? 'upcoming' : 'past'} events at the moment.</Text>
           </View>
         ) : (
           events.map((event) => (
@@ -192,6 +226,36 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   retryButtonText: { color: "#FFF", fontWeight: "600" },
+
+  // Tabs
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 4,
+    gap: 8,
+  },
+  tabItem: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#e1e5ea',
+    backgroundColor: '#f8fafc',
+    borderRadius: 20,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  tabItemActive: {
+    backgroundColor: '#e9f2ff',
+    borderColor: '#1e67cd',
+  },
+  tabText: {
+    color: '#5b6b7a',
+    fontWeight: '600',
+  },
+  tabTextActive: {
+    color: '#1e67cd',
+  },
 
   scrollView: { flex: 1, padding: 16 },
   emptyContainer: { alignItems: "center", padding: 20 },

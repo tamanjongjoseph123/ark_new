@@ -1,10 +1,12 @@
 "use client"
 
-import { useState } from "react"
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Dimensions, StatusBar, Image } from "react-native"
+import { useEffect, useState } from "react"
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Dimensions, StatusBar, Image, ActivityIndicator } from "react-native"
 import { LinearGradient } from "expo-linear-gradient"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
+import { listCourses, listModules, listCourseVideos } from "./services/api"
+import { BASE_URL } from "./base_url"
 
 const { width } = Dimensions.get("window")
 
@@ -15,6 +17,13 @@ export default function KingdomLeadership() {
   const [selectedVideo, setSelectedVideo] = useState(null)
   const [showVideoModal, setShowVideoModal] = useState(false)
   const [selectedModule, setSelectedModule] = useState(null)
+  const [selectedCourse, setSelectedCourse] = useState(null)
+  const [courses, setCourses] = useState([])
+  const [modules, setModules] = useState([])
+  const [videos, setVideos] = useState([])
+  const [loadingCourses, setLoadingCourses] = useState(false)
+  const [loadingModules, setLoadingModules] = useState(false)
+  const [loadingVideos, setLoadingVideos] = useState(false)
 
   // Language options with their corresponding stream URLs
   const languages = [
@@ -33,181 +42,212 @@ export default function KingdomLeadership() {
   }
 
   const handleVideoSelect = (video) => {
-    // Extract YouTube video ID from URL
-    const videoId = video.videoUrl.split("v=")[1]?.split("&")[0] || "-VJKbieTmKA"
+    // Extract YouTube video ID from URL (robust, no static fallback)
+    const src = video.youtube_url || video.videoUrl || ""
+    const videoId = youTubeId(src)
 
     // Navigate to video details instead of showing modal
     router.push({
       pathname: "/video-details-two",
       params: {
-        videoId: videoId,
-        title: video.title,
-        youtubeUrl: video.videoUrl,
+        videoId: videoId || "",
+        title: video.name || video.title,
+        youtubeUrl: src,
+        courseVideoId: String(video.id || ""),
       },
     })
   }
 
+  const handleCourseSelect = (course) => {
+    setSelectedCourse(course)
+    setSelectedModule(null)
+    setVideos([])
+    setLoadingModules(true)
+    listModules(course.id)
+      .then((mods) => {
+        if (!Array.isArray(mods)) mods = []
+        // compute counts lazily (optional)
+        return Promise.all(
+          mods.map(async (m) => {
+            try {
+              const vids = await listCourseVideos(m.id)
+              return { ...m, videoCount: Array.isArray(vids) ? vids.length : 0 }
+            } catch {
+              return { ...m, videoCount: 0 }
+            }
+          })
+        )
+      })
+      .then((withCounts) => setModules(withCounts || []))
+      .finally(() => setLoadingModules(false))
+  }
+
   const handleModuleSelect = (module) => {
     setSelectedModule(module)
+    setLoadingVideos(true)
+    listCourseVideos(module.id)
+      .then((data) => {
+        setVideos(Array.isArray(data) ? data : [])
+      })
+      .finally(() => setLoadingVideos(false))
   }
 
   const handleBackToModules = () => {
     setSelectedModule(null)
+    setVideos([])
   }
 
-  const modules = [
-    {
-      id: 1,
-      name: "Servant Leadership",
-      description: "Learn the biblical principles of leading through service and humility",
-      thumbnail: "https://img.youtube.com/vi/C4GvseNapRw/maxresdefault.jpg",
-      videoCount: 6,
-      level: "Beginner to Intermediate",
-    },
-    {
-      id: 2,
-      name: "Vision Casting",
-      description: "Master the art of communicating God's vision and inspiring others",
-      thumbnail: "https://img.youtube.com/vi/tcM6N9iHzdM/maxresdefault.jpg",
-      videoCount: 8,
-      level: "Intermediate to Advanced",
-    },
-    {
-      id: 3,
-      name: "Team Building",
-      description: "Build and lead effective ministry teams with Kingdom principles",
-      thumbnail: "https://img.youtube.com/vi/xUoOg3fs-mo/maxresdefault.jpg",
-      videoCount: 7,
-      level: "All Levels",
-    },
-    {
-      id: 4,
-      name: "Conflict Resolution",
-      description: "Navigate difficult situations with wisdom and grace",
-      thumbnail: "https://img.youtube.com/vi/b9OQRcwAcNQ/maxresdefault.jpg",
-      videoCount: 5,
-      level: "Intermediate to Advanced",
-    },
-    {
-      id: 5,
-      name: "Strategic Planning",
-      description: "Develop long-term strategies aligned with Kingdom purposes",
-      thumbnail: "https://img.youtube.com/vi/C4GvseNapRw/maxresdefault.jpg",
-      videoCount: 9,
-      level: "Advanced",
-    },
-    {
-      id: 6,
-      name: "Mentoring & Discipleship",
-      description: "Equip and empower the next generation of leaders",
-      thumbnail: "https://img.youtube.com/vi/tcM6N9iHzdM/maxresdefault.jpg",
-      videoCount: 10,
-      level: "All Levels",
-    },
-  ]
+  const handleBackToCourses = () => {
+    setSelectedModule(null)
+    setModules([])
+    setSelectedCourse(null)
+  }
 
-  const getVideosForModule = (moduleId) => {
-    const videoUrlsPool = [
-      "https://www.youtube.com/watch?v=C4GvseNapRw&pp=ygUIam9obiBjaGk%3D",
-      "https://www.youtube.com/watch?v=tcM6N9iHzdM&pp=ygUIam9obiBjaGk%3D",
-      "https://www.youtube.com/watch?v=xUoOg3fs-mo&list=PLcyyL4LFGjy0T0yN5glD9HCfZuz7_7SU4",
-      "https://www.youtube.com/watch?v=b9OQRcwAcNQ&pp=ygUIam9obiBjaGk%3D",
-    ]
+  // Helpers
+  const toImageUrl = (url) => {
+    if (!url) return ""
+    if (url.startsWith("http")) return url
+    return `${BASE_URL}${url.startsWith("/") ? "" : "/"}${url}`
+  }
 
-    const videoIds = ["C4GvseNapRw", "tcM6N9iHzdM", "xUoOg3fs-mo", "b9OQRcwAcNQ"]
-
-    const videoTemplates = [
-      {
-        id: `${moduleId}_1`,
-        title: `${modules.find((m) => m.id === moduleId)?.name} - Introduction`,
-        description: "Foundation and overview of key concepts",
-        duration: "45 min",
-        level: "Beginner",
-        videoUrl: videoUrlsPool[0],
-        thumbnail: `https://img.youtube.com/vi/${videoIds[0]}/maxresdefault.jpg`,
-      },
-      {
-        id: `${moduleId}_2`,
-        title: `${modules.find((m) => m.id === moduleId)?.name} - Core Principles`,
-        description: "Essential principles and practical applications",
-        duration: "52 min",
-        level: "Intermediate",
-        videoUrl: videoUrlsPool[1],
-        thumbnail: `https://img.youtube.com/vi/${videoIds[1]}/maxresdefault.jpg`,
-      },
-      {
-        id: `${moduleId}_3`,
-        title: `${modules.find((m) => m.id === moduleId)?.name} - Advanced Techniques`,
-        description: "Advanced strategies and real-world implementation",
-        duration: "58 min",
-        level: "Advanced",
-        videoUrl: videoUrlsPool[2],
-        thumbnail: `https://img.youtube.com/vi/${videoIds[2]}/maxresdefault.jpg`,
-      },
-      {
-        id: `${moduleId}_4`,
-        title: `${modules.find((m) => m.id === moduleId)?.name} - Case Studies`,
-        description: "Real examples and practical scenarios",
-        duration: "40 min",
-        level: "Intermediate",
-        videoUrl: videoUrlsPool[3],
-        thumbnail: `https://img.youtube.com/vi/${videoIds[3]}/maxresdefault.jpg`,
-      },
-      {
-        id: `${moduleId}_5`,
-        title: `${modules.find((m) => m.id === moduleId)?.name} - Q&A Session`,
-        description: "Common questions and expert answers",
-        duration: "35 min",
-        level: "All Levels",
-        videoUrl: videoUrlsPool[0], // Cycle back to first video
-        thumbnail: `https://img.youtube.com/vi/${videoIds[0]}/maxresdefault.jpg`,
-      },
-    ]
-
-    const module = modules.find((m) => m.id === moduleId)
-    if (module) {
-      return videoTemplates.slice(0, Math.min(module.videoCount, videoTemplates.length))
+  const youTubeId = (url = "") => {
+    if (!url) return null
+    try {
+      // Handle full URL with v= param
+      const vParam = url.split("v=")[1]?.split("&")[0]
+      if (vParam) return vParam
+      // Handle youtu.be short links
+      const short = url.match(/youtu\.be\/([\w-]{6,})/)
+      if (short?.[1]) return short[1]
+      // Handle embed URLs
+      const embed = url.match(/embed\/([\w-]{6,})/)
+      if (embed?.[1]) return embed[1]
+      // Handle shorts
+      const shorts = url.match(/shorts\/([\w-]{6,})/)
+      if (shorts?.[1]) return shorts[1]
+      return null
+    } catch {
+      return null
     }
-    return videoTemplates
   }
+
+  // Fetch Sons of John Chi courses -> start at courses view
+  const loadMentorship = async () => {
+    let mounted = true
+    setLoadingCourses(true)
+    try {
+      let list = await listCourses("sons_of_john_chi")
+      if (!mounted) return
+      if (!Array.isArray(list) || list.length === 0) {
+        const allCourses = await listCourses(null)
+        list = (allCourses || []).filter(
+          (c) => typeof c?.category === "string" && c.category.toLowerCase() === "sons_of_john_chi"
+        )
+      }
+      setCourses(Array.isArray(list) ? list : [])
+      // Ensure we start at courses view
+      setSelectedCourse(null)
+      setModules([])
+      setSelectedModule(null)
+    } finally {
+      setLoadingCourses(false)
+    }
+    return () => {
+      mounted = false
+    }
+  }
+
+  useEffect(() => {
+    loadMentorship()
+  }, [])
 
   return (
     <View style={styles.container}>
       <StatusBar backgroundColor="#3498DB" barStyle="light-content" />
 
-      <LinearGradient colors={["#3498DB", "#2980B9"]} style={styles.header}>
-        {selectedModule && (
-          <TouchableOpacity style={styles.backButton} onPress={handleBackToModules}>
-            <Ionicons name="arrow-back" size={24} color="#FFF" />
-          </TouchableOpacity>
-        )}
-        <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Sons of John chi</Text>
-        </View>
-        <View style={styles.headerRight}>
-          <TouchableOpacity onPress={() => router.push("/livestreaming")} style={styles.liveButton}>
-            <View style={styles.liveIndicator} />
-            <Text style={styles.liveText}>LIVE</Text>
-          </TouchableOpacity>
-        </View>
-      </LinearGradient>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {!selectedModule ? (
-          // Show Modules
+        {!selectedCourse ? (
           <>
-            <View style={styles.welcomeSection}>
-              <Text style={styles.welcomeTitle}>Welcome to Sons of John Chi</Text>
-              <Text style={styles.welcomeSubtitle}>
-               Grow through biblical principles and practical wisdom
-              </Text>
+            {loadingCourses && (
+              <View style={styles.loadingWrap}>
+                <ActivityIndicator size="large" color="#3498DB" />
+                <Text style={styles.loadingText}>Loading Sons of John Chi courses...</Text>
+              </View>
+            )}
+            {!loadingCourses && courses.length === 0 && (
+              <View style={styles.emptyWrap}>
+                <Text style={styles.emptyTitle}>No Sons of John Chi courses found</Text>
+                <Text style={styles.emptySubtitle}>Pull to refresh or tap retry below.</Text>
+                <TouchableOpacity style={styles.retryBtn} onPress={loadMentorship}>
+                  <Text style={styles.retryText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {!loadingCourses && courses.length > 0 && (
+              <LinearGradient colors={["#3498DB", "#2980B9"]} style={styles.welcomeSection}>
+                <Ionicons name="school" size={32} color="#FFF" />
+                <Text style={styles.welcomeTitle}>Welcome to Sons of John Chi</Text>
+                <Text style={styles.welcomeSubtitle}>Explore our courses</Text>
+              </LinearGradient>
+            )}
+            {/* Courses Grid */}
+            <View style={styles.modulesContainer}>
+              {courses.map((course) => (
+                <TouchableOpacity key={course.id} style={styles.moduleCard} onPress={() => handleCourseSelect(course)}>
+                  <Image source={{ uri: toImageUrl(course.image) }} style={styles.moduleThumbnail} resizeMode="cover" />
+                  <View style={styles.moduleInfoContainer}>
+                    <Text style={styles.moduleName}>{course.name}</Text>
+                    <Text style={styles.moduleDescription} numberOfLines={3}>
+                      {course.description}
+                    </Text>
+                    <View style={styles.moduleMeta}>
+                      <View style={styles.moduleMetaItem}>
+                        <Ionicons name="albums" size={16} color="#3498DB" />
+                        <Text style={styles.moduleMetaText}>Course</Text>
+                      </View>
+                      <View style={styles.moduleMetaItem}>
+                        <Ionicons name="pricetag" size={16} color="#3498DB" />
+                        <Text style={styles.moduleMetaText}>{course.category}</Text>
+                      </View>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
             </View>
+          </>
+        ) : !selectedModule ? (
+          // Show Modules for selected course
+          <>
+            <View style={{ paddingHorizontal: 20, paddingTop: 10 }}>
+              <TouchableOpacity onPress={handleBackToCourses} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="arrow-back" size={20} color="#3498DB" />
+                <Text style={{ marginLeft: 6, color: '#3498DB', fontWeight: '600' }}>Back to Courses</Text>
+              </TouchableOpacity>
+              <Text style={{ marginTop: 10, fontSize: 20, fontWeight: '700', color: '#2C3E50' }}>{selectedCourse?.name}</Text>
+            </View>
+
+            {loadingModules && (
+              <View style={styles.loadingWrap}>
+                <ActivityIndicator size="large" color="#3498DB" />
+                <Text style={styles.loadingText}>Loading modules...</Text>
+              </View>
+            )}
+            {!loadingModules && modules.length === 0 && (
+              <View style={styles.emptyWrap}>
+                <Text style={styles.emptyTitle}>No modules found</Text>
+                <Text style={styles.emptySubtitle}>Try another course or retry below.</Text>
+                <TouchableOpacity style={styles.retryBtn} onPress={() => handleCourseSelect(selectedCourse)}>
+                  <Text style={styles.retryText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             {/* Modules Grid */}
             <View style={styles.modulesContainer}>
               {modules.map((module) => (
                 <TouchableOpacity key={module.id} style={styles.moduleCard} onPress={() => handleModuleSelect(module)}>
-                  <Image source={{ uri: module.thumbnail }} style={styles.moduleThumbnail} resizeMode="cover" />
+                  <Image source={{ uri: toImageUrl(module.image) }} style={styles.moduleThumbnail} resizeMode="cover" />
                   <View style={styles.moduleInfoContainer}>
                     <Text style={styles.moduleName}>{module.name}</Text>
                     <Text style={styles.moduleDescription} numberOfLines={3}>
@@ -216,11 +256,11 @@ export default function KingdomLeadership() {
                     <View style={styles.moduleMeta}>
                       <View style={styles.moduleMetaItem}>
                         <Ionicons name="videocam" size={16} color="#3498DB" />
-                        <Text style={styles.moduleMetaText}>{module.videoCount} videos</Text>
+                        <Text style={styles.moduleMetaText}>{module.videoCount ?? 0} videos</Text>
                       </View>
                       <View style={styles.moduleMetaItem}>
                         <Ionicons name="trending-up" size={16} color="#3498DB" />
-                        <Text style={styles.moduleMetaText}>{module.level}</Text>
+                        <Text style={styles.moduleMetaText}>{module.level || "All Levels"}</Text>
                       </View>
                     </View>
                   </View>
@@ -234,7 +274,7 @@ export default function KingdomLeadership() {
             {/* Module Header */}
             <View style={styles.moduleHeader}>
               <Image
-                source={{ uri: selectedModule.thumbnail }}
+                source={{ uri: toImageUrl(selectedModule.image) }}
                 style={styles.moduleHeaderThumbnail}
                 resizeMode="cover"
               />
@@ -242,9 +282,9 @@ export default function KingdomLeadership() {
                 <Text style={styles.moduleHeaderTitle}>{selectedModule.name}</Text>
                 <Text style={styles.moduleHeaderDescription}>{selectedModule.description}</Text>
                 <View style={styles.moduleHeaderMeta}>
-                  <Text style={styles.moduleHeaderMetaText}>{selectedModule.videoCount} videos</Text>
+                  <Text style={styles.moduleHeaderMetaText}>{selectedModule.videoCount ?? videos.length} videos</Text>
                   <Text style={styles.moduleHeaderMetaText}>•</Text>
-                  <Text style={styles.moduleHeaderMetaText}>{selectedModule.level}</Text>
+                  <Text style={styles.moduleHeaderMetaText}>{selectedModule.level || "All Levels"}</Text>
                 </View>
               </LinearGradient>
             </View>
@@ -252,32 +292,53 @@ export default function KingdomLeadership() {
             {/* Videos List */}
             <View style={styles.videosContainer}>
               <Text style={styles.videosSectionTitle}> Videos</Text>
-              {getVideosForModule(selectedModule.id).map((video) => (
-                <TouchableOpacity key={video.id} style={styles.videoCard} onPress={() => handleVideoSelect(video)}>
-                  <Image source={{ uri: video.thumbnail }} style={styles.videoThumbnail} resizeMode="cover" />
-                  <View style={styles.videoInfo}>
-                    <Text style={styles.videoTitle} numberOfLines={2}>
-                      {video.title}
-                    </Text>
-                    <Text style={styles.videoDescription} numberOfLines={2}>
-                      {video.description}
-                    </Text>
-                    <View style={styles.videoMeta}>
-                      <View style={styles.videoMetaItem}>
-                        <Ionicons name="time" size={14} color="#666" />
-                        <Text style={styles.videoMetaText}>{video.duration}</Text>
+              {loadingVideos ? (
+                <View style={styles.loadingWrap}>
+                  <ActivityIndicator size="large" color="#3498DB" />
+                  <Text style={styles.loadingText}>Loading videos...</Text>
+                </View>
+              ) : (
+                videos.map((video) => {
+                  const id = youTubeId(video.youtube_url || "")
+                  const ytThumb = id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : null
+                  const apiThumb = (video.thumbnail || video.thumbnail_url || video.image)
+                    ? toImageUrl(video.thumbnail || video.thumbnail_url || video.image)
+                    : null
+                  const thumb = apiThumb || ytThumb
+                  return (
+                    <TouchableOpacity key={video.id} style={styles.videoCard} onPress={() => handleVideoSelect(video)}>
+                      {thumb ? (
+                        <Image source={{ uri: thumb }} style={styles.videoThumbnail} resizeMode="cover" />
+                      ) : (
+                        <View style={[styles.videoThumbnail, { backgroundColor: '#eee', alignItems:'center', justifyContent:'center' }]}>
+                          <Ionicons name="videocam" size={24} color="#999" />
+                        </View>
+                      )}
+                      <View style={styles.videoInfo}>
+                        <Text style={styles.videoTitle} numberOfLines={2}>
+                          {video.name}
+                        </Text>
+                        <Text style={styles.videoDescription} numberOfLines={2}>
+                          {video.description}
+                        </Text>
+                        <View style={styles.videoMeta}>
+                          <View style={styles.videoMetaItem}>
+                            <Ionicons name="time" size={14} color="#666" />
+                            <Text style={styles.videoMetaText}>Video</Text>
+                          </View>
+                          <View style={styles.videoMetaItem}>
+                            <Ionicons name="trending-up" size={14} color="#666" />
+                            <Text style={styles.videoMetaText}>All Levels</Text>
+                          </View>
+                        </View>
                       </View>
-                      <View style={styles.videoMetaItem}>
-                        <Ionicons name="trending-up" size={14} color="#666" />
-                        <Text style={styles.videoMetaText}>{video.level}</Text>
+                      <View style={styles.videoPlayButton}>
+                        <Ionicons name="play-circle" size={40} color="#3498DB" />
                       </View>
-                    </View>
-                  </View>
-                  <View style={styles.videoPlayButton}>
-                    <Ionicons name="play-circle" size={40} color="#3498DB" />
-                  </View>
-                </TouchableOpacity>
-              ))}
+                    </TouchableOpacity>
+                  )
+                })
+              )}
             </View>
           </>
         )}
@@ -486,6 +547,64 @@ const styles = StyleSheet.create({
   },
   videosContainer: {
     padding: 20,
+  },
+  loadingWrap: {
+    padding: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingText: {
+    marginTop: 10,
+    color: "#666",
+  },
+  emptyWrap: {
+    padding: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#2C3E50",
+    marginBottom: 6,
+    textAlign: "center",
+  },
+  emptySubtitle: {
+    color: "#7F8C8D",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  retryBtn: {
+    backgroundColor: "#3498DB",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  retryText: {
+    color: "#FFF",
+    fontWeight: "600",
+  },
+  welcomeSection: {
+    marginHorizontal: 20,
+    marginTop: 10,
+    marginBottom: 10,
+    borderRadius: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  welcomeTitle: {
+    color: "#FFF",
+    fontSize: 20,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  welcomeSubtitle: {
+    color: "#EAF2F8",
+    fontSize: 14,
+    textAlign: "center",
   },
   videosSectionTitle: {
     fontSize: 20,

@@ -24,6 +24,43 @@ export const getVideos = async (category = null) => {
     }
 };
 
+// Devotions
+export const listDevotions = async (params = {}) => {
+    try {
+        const query = new URLSearchParams();
+        if (params.content_type) query.append('content_type', params.content_type);
+        if (params.date) query.append('date', params.date);
+        if (params.today) query.append('today', String(params.today));
+        const url = `/api/devotions/${query.toString() ? `?${query.toString()}` : ''}`;
+        const response = await api.get(url);
+        return response.data;
+    } catch (error) {
+        console.error('Error listing devotions:', error);
+        throw error;
+    }
+};
+
+export const getTodayDevotion = async () => {
+    try {
+        const response = await api.get('/api/devotions/today/');
+        return response.data;
+    } catch (error) {
+        if (error?.response?.status === 404) return null;
+        console.error('Error fetching today\'s devotion:', error);
+        throw error;
+    }
+};
+
+export const getDevotion = async (id) => {
+    try {
+        const response = await api.get(`/api/devotions/${id}/`);
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching devotion:', error);
+        throw error;
+    }
+};
+
 // Praise and Worship specific endpoints
 export const getPraiseVideos = async () => {
     try {
@@ -97,6 +134,85 @@ export const getTestimonies = async () => {
     } catch (error) {
         console.error('Error fetching testimonies:', error);
         return [];
+    }
+};
+
+// Courses API
+export const listCourses = async (category = null) => {
+    try {
+        const url = category ? `/api/courses/?category=${encodeURIComponent(category)}` : '/api/courses/';
+        const response = await api.get(url);
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching courses:', error);
+        return [];
+    }
+};
+
+export const listModules = async (courseId = null) => {
+    try {
+        const url = courseId ? `/api/modules/?course=${encodeURIComponent(courseId)}` : '/api/modules/';
+        const response = await api.get(url);
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching modules:', error);
+        return [];
+    }
+};
+
+export const listCourseVideos = async (moduleId = null) => {
+    try {
+        const url = moduleId ? `/api/course-videos/?module=${encodeURIComponent(moduleId)}` : '/api/course-videos/';
+        const response = await api.get(url);
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching course videos:', error);
+        return [];
+    }
+};
+
+// Single Course Video
+export const getCourseVideo = async (id) => {
+    try {
+        const response = await api.get(`/api/course-videos/${id}/`);
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching course video details:', error);
+        throw error;
+    }
+};
+
+// Comments
+export const listComments = async (videoId) => {
+    try {
+        const url = videoId ? `/api/comments/?video=${encodeURIComponent(videoId)}` : '/api/comments/';
+        const response = await api.get(url);
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching comments:', error);
+        return [];
+    }
+};
+
+export const postComment = async ({ token, video, text, parent = null }) => {
+    try {
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const response = await api.post('/api/comments/', { video, parent, text }, { headers });
+        return response.data;
+    } catch (error) {
+        console.error('Error posting comment:', error);
+        throw error;
+    }
+};
+
+// Auth
+export const login = async ({ username, password }) => {
+    try {
+        const response = await api.post('/api/auth/login', { username, password });
+        return response.data; // { token, refresh, user }
+    } catch (error) {
+        console.error('Login failed:', error?.response?.data || error?.message);
+        throw error;
     }
 };
 

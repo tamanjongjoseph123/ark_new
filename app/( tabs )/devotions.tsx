@@ -1,57 +1,84 @@
 "use client"
 
-import { useState } from "react"
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert } from "react-native"
+import { useEffect, useState } from "react"
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Image } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
+import { listDevotions, getTodayDevotion } from "../services/api"
 
-interface Devotion {
-  id: string // Fixed syntax error by removing extra > character
-  date: string
+type ApiDevotion = {
+  id: number
   title: string
-  verse: string
-  content: string
-  author: string
-  videoUrl?: string
+  content_type: "text" | "video"
+  description: string
+  text_content: string | null
+  youtube_url: string | null
+  devotion_date: string
+  created_at: string
+  thumbnail_url: string | null
 }
-
-const devotionsData: Devotion[] = [
-  {
-    id: "1",
-    date: "January 15, 2024",
-    title: "Walking in Faith",
-    verse: "Hebrews 11:1",
-    content:
-      "Now faith is confidence in what we hope for and assurance about what we do not see. Faith is not just believing in God, but trusting Him completely with our lives, our dreams, and our future. When we walk in faith, we step into the unknown with confidence because we know God is leading us.",
-    author: "Appostle John Chi",
-    videoUrl: "https://www.youtube.com/watch?v=b9OQRcwAcNQ&pp=ygUIam9obiBjaGk%3D",
-  },
-  {
-    id: "2",
-    date: "January 14, 2024",
-    title: "God's Unfailing Love",
-    verse: "1 John 4:19",
-    content:
-      "We love because he first loved us. God's love is not conditional on our performance or perfection. His love is constant, unwavering, and eternal. Even when we fail, His love remains. This truth should transform how we see ourselves and how we love others.",
-    author: "Appostle John Chi",
-  },
-  {
-    id: "3",
-    date: "January 13, 2024",
-    title: "Finding Peace in Storms",
-    verse: "John 14:27",
-    content:
-      "Peace I leave with you; my peace I give you. I do not give to you as the world gives. Do not let your hearts be troubled and do not be afraid. In the midst of life's storms, Jesus offers us a peace that surpasses understanding.",
-    author: "Appostle John Chi",
-    videoUrl: "https://www.youtube.com/watch?v=b9OQRcwAcNQ&pp=ygUIam9obiBjaGk%3D",
-  },
-]
 
 export default function DevotionsScreen() {
   const router = useRouter() // Add this hook
-  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set())
+  const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set())
+  const [today, setToday] = useState<ApiDevotion | null>(null)
+  const [devotions, setDevotions] = useState<ApiDevotion[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const toggleExpanded = (id: string) => {
+  const youTubeId = (url: string = "") => {
+    try {
+      const vParam = url.split("v=")[1]?.split("&")[0]
+      if (vParam) return vParam
+      const short = url.match(/youtu\.be\/([\w-]{6,})/)
+      if (short?.[1]) return short[1]
+      const embed = url.match(/embed\/([\w-]{6,})/)
+      if (embed?.[1]) return embed[1]
+      const shorts = url.match(/shorts\/([\w-]{6,})/)
+      if (shorts?.[1]) return shorts[1]
+      return null
+    } catch {
+      return null
+    }
+  }
+
+  const isValidDate = (s?: string | null) => {
+    if (!s) return false
+    const d = new Date(s)
+    return !isNaN(d.getTime())
+  }
+
+  const toDateLabel = (s?: string | null) => {
+    if (!isValidDate(s)) return ''
+    return new Date(s as string).toDateString()
+  }
+
+  const loadDevotions = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [todayItem, list] = await Promise.all([
+        getTodayDevotion().catch(() => null),
+        listDevotions().catch(() => []),
+      ])
+      setToday(todayItem)
+      // Avoid duplicate if today is also included in list
+      const filtered = Array.isArray(list)
+        ? list.filter((d: ApiDevotion) => (todayItem ? d.id !== todayItem.id : true))
+        : []
+      setDevotions(filtered)
+    } catch (e) {
+      setError("Failed to load devotions")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadDevotions()
+  }, [])
+
+  const toggleExpanded = (id: number) => {
     const newExpanded = new Set(expandedCards)
     if (newExpanded.has(id)) {
       newExpanded.delete(id)
@@ -62,8 +89,7 @@ export default function DevotionsScreen() {
   }
 
   const openVideo = (url: string) => {
-    // Extract YouTube video ID from URL
-    const videoId = url.split("v=")[1]?.split("&")[0]
+    const videoId = youTubeId(url || "")
     if (!videoId) {
       Alert.alert("Error", "Invalid video URL")
       return
@@ -71,13 +97,20 @@ export default function DevotionsScreen() {
 
     // Navigate to video details screen with params (same as kingdom-leadership)
     router.push({
-      pathname: "/video-details",
+      pathname: "/video-details-two",
       params: {
         videoId: videoId,
         title: "Devotional Video",
         youtubeUrl: url,
       },
     })
+  }
+
+  // Prefer API-provided thumbnail; fallback to YouTube derived URL
+  const videoThumb = (youtube_url?: string | null, apiThumb?: string | null) => {
+    if (apiThumb) return apiThumb
+    const id = youTubeId(youtube_url || "")
+    return id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : undefined
   }
 
   const shareDevotional = (devotion: Devotion) => {
@@ -96,42 +129,106 @@ export default function DevotionsScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {devotionsData.map((devotion) => {
-          const isExpanded = expandedCards.has(devotion.id)
-          const previewContent = devotion.content.substring(0, 120) + "..."
+        {loading && (
+          <View style={{ padding: 20, alignItems: 'center' }}>
+            <ActivityIndicator size="large" color="#1e67cd" />
+            <Text style={{ marginTop: 8, color: '#666' }}>Loading devotions...</Text>
+          </View>
+        )}
 
-          return (
-            <View key={devotion.id} style={styles.devotionCard}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.date}>{devotion.date}</Text>
-                <TouchableOpacity onPress={() => shareDevotional(devotion)} style={styles.shareButton}>
-                  <Ionicons name="share-outline" size={20} color="#1e67cd" />
-                </TouchableOpacity>
-              </View>
+        {!loading && error && (
+          <View style={{ padding: 20, alignItems: 'center' }}>
+            <Text style={{ color: '#c00' }}>{error}</Text>
+            <TouchableOpacity onPress={loadDevotions} style={[styles.videoButton, { marginTop: 10 }]}> 
+              <Text style={styles.videoButtonText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
-              <Text style={styles.title}>{devotion.title}</Text>
-
-              <View style={styles.verseContainer}>
-                <Ionicons name="book-outline" size={16} color="#1e67cd" />
-                <Text style={styles.verse}>{devotion.verse}</Text>
-              </View>
-
-              <Text style={styles.content}>{isExpanded ? devotion.content : previewContent}</Text>
-
-              <TouchableOpacity onPress={() => toggleExpanded(devotion.id)} style={styles.readMoreButton}>
-                <Text style={styles.readMoreText}>{isExpanded ? "Read Less" : "Read More"}</Text>
-                <Ionicons name={isExpanded ? "chevron-up" : "chevron-down"} size={16} color="#1e67cd" />
+        {!loading && !error && today && isValidDate(today.devotion_date) && (
+          <View style={[styles.devotionCard, { borderLeftWidth: 4, borderLeftColor: '#1e67cd' }]}>
+            <View style={styles.cardHeader}>
+              {isValidDate(today.devotion_date) ? (
+                <Text style={styles.date}>{toDateLabel(today.devotion_date)}</Text>
+              ) : (
+                <View />
+              )}
+              <TouchableOpacity onPress={() => shareDevotional({
+                id: String(today.id),
+                date: today.devotion_date,
+                title: today.title,
+                verse: '', content: today.description, author: ''
+              })} style={styles.shareButton}>
+                <Ionicons name="share-outline" size={20} color="#1e67cd" />
               </TouchableOpacity>
-
-              {devotion.videoUrl && (
-                <TouchableOpacity style={styles.videoButton} onPress={() => openVideo(devotion.videoUrl!)}>
+            </View>
+            <Text style={styles.title}>{today.title}</Text>
+            {today.content_type === 'text' && (
+              <Text style={styles.content}>{today.text_content || today.description}</Text>
+            )}
+            {today.content_type === 'video' && today.youtube_url && (
+              <>
+                {videoThumb(today.youtube_url, today.thumbnail_url) && (
+                  <Image source={{ uri: videoThumb(today.youtube_url, today.thumbnail_url) }} style={styles.videoThumbnail} resizeMode="cover" />
+                )}
+                <TouchableOpacity style={styles.videoButton} onPress={() => openVideo(today.youtube_url!)}>
                   <Ionicons name="play-circle" size={24} color="#fff" />
                   <Text style={styles.videoButtonText}>Watch Video</Text>
                 </TouchableOpacity>
-              )}
+              </>
+            )}
+          </View>
+        )}
+
+        {!loading && !error && !today && devotions.length === 0 && (
+          <View style={{ padding: 20, alignItems: 'center' }}>
+            <Text style={{ color: '#333', fontSize: 16, fontWeight: '600', marginBottom: 6 }}>No devotions available</Text>
+            <Text style={{ color: '#666', textAlign: 'center', marginBottom: 12 }}>Please check back later or tap retry.</Text>
+            <TouchableOpacity onPress={loadDevotions} style={styles.videoButton}>
+              <Text style={styles.videoButtonText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {!loading && !error && devotions.map((d) => {
+          const isExpanded = expandedCards.has(d.id)
+          const fullText = d.text_content || d.description || ""
+          const preview = fullText.length > 120 ? fullText.substring(0, 120) + "..." : fullText
+          return (
+            <View key={d.id} style={styles.devotionCard}>
+              <View style={styles.cardHeader}>
+                {isValidDate(d.devotion_date) && (
+                  <Text style={styles.date}>{toDateLabel(d.devotion_date)}</Text>
+                )}
+                <TouchableOpacity onPress={() => shareDevotional({ id: String(d.id), date: d.devotion_date, title: d.title, verse: '', content: fullText, author: '' })} style={styles.shareButton}>
+                  <Ionicons name="share-outline" size={20} color="#1e67cd" />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.title}>{d.title}</Text>
+              {d.content_type === 'text' ? (
+                <>
+                  <Text style={styles.content}>{isExpanded ? fullText : preview}</Text>
+                  {fullText.length > 120 && (
+                    <TouchableOpacity onPress={() => toggleExpanded(d.id)} style={styles.readMoreButton}>
+                      <Text style={styles.readMoreText}>{isExpanded ? "Read Less" : "Read More"}</Text>
+                      <Ionicons name={isExpanded ? "chevron-up" : "chevron-down"} size={16} color="#1e67cd" />
+                    </TouchableOpacity>
+                  )}
+                </>
+              ) : d.youtube_url ? (
+                <>
+                  {videoThumb(d.youtube_url, d.thumbnail_url) && (
+                    <Image source={{ uri: videoThumb(d.youtube_url, d.thumbnail_url) }} style={styles.videoThumbnail} resizeMode="cover" />
+                  )}
+                  <TouchableOpacity style={styles.videoButton} onPress={() => openVideo(d.youtube_url!)}>
+                    <Ionicons name="play-circle" size={24} color="#fff" />
+                    <Text style={styles.videoButtonText}>Watch Video</Text>
+                  </TouchableOpacity>
+                </>
+              ) : null}
 
               <View style={styles.cardFooter}>
-                <Text style={styles.author}>By {devotion.author}</Text>
+                <Text style={styles.author}>Daily Devotion</Text>
                 <View style={styles.actions}>
                   <TouchableOpacity style={styles.actionButton}>
                     <Ionicons name="heart-outline" size={18} color="#666" />
@@ -285,5 +382,12 @@ const styles = StyleSheet.create({
   actionButton: {
     padding: 8,
     marginLeft: 10,
+  },
+  videoThumbnail: {
+    width: "100%",
+    height: 180,
+    borderRadius: 10,
+    marginBottom: 12,
+    backgroundColor: "#eaeaea",
   },
 })

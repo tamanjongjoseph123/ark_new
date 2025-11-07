@@ -1,23 +1,113 @@
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Dimensions, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Dimensions, ActivityIndicator, Modal, TextInput, KeyboardAvoidingView, Platform, FlatList, Alert as RNAlert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import WebView from 'react-native-webview';
 import { StatusBar } from 'expo-status-bar';
 import { Linking, Alert } from 'react-native';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { getCourseVideo, listComments, postComment, login } from './services/api';
 
 export default function VideoDetail() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { videoId, title, youtubeUrl } = params;
+  const { videoId, title, youtubeUrl, courseVideoId } = params;
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('keyTakeaways');
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState('English');
   const webViewRef = useRef(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsError, setDetailsError] = useState(null);
+  const [keyTakeaways, setKeyTakeaways] = useState('');
+  const [assignments, setAssignments] = useState('');
+  const [comments, setComments] = useState([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentText, setCommentText] = useState('');
+  const [authToken, setAuthToken] = useState(null);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState(null);
 
   console.log('Video Details Params:', { videoId, title, youtubeUrl });
+
+  // Reset player loading state when video changes
+  useEffect(() => {
+    setIsLoading(true);
+    setError(null);
+  }, [videoId, youtubeUrl]);
+
+  // Load video details and comments
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      if (!courseVideoId) return;
+      setDetailsLoading(true);
+      setCommentsLoading(true);
+      try {
+        const [video, cmts] = await Promise.all([
+          getCourseVideo(courseVideoId).catch((e) => {
+            setDetailsError('Failed to load details');
+            return null;
+          }),
+          listComments(courseVideoId).catch(() => []),
+        ]);
+        if (!mounted) return;
+        if (video) {
+          setKeyTakeaways(video.key_takeaways || '');
+          setAssignments(video.assignments || '');
+        }
+        setComments(Array.isArray(cmts) ? cmts : []);
+      } finally {
+        setDetailsLoading(false);
+        setCommentsLoading(false);
+      }
+    };
+    load();
+    return () => { mounted = false; };
+  }, [courseVideoId]);
+
+  const handleSendComment = async () => {
+    if (!commentText.trim()) return;
+    if (!authToken) {
+      setShowLoginModal(true);
+      return;
+    }
+    try {
+      await postComment({ token: authToken, video: Number(courseVideoId), text: commentText.trim(), parent: null });
+      setCommentText('');
+      const refreshed = await listComments(courseVideoId);
+      setComments(Array.isArray(refreshed) ? refreshed : []);
+    } catch (e) {
+      RNAlert.alert('Error', 'Failed to post comment.');
+    }
+  };
+
+  const handleLogin = async () => {
+    if (!loginUsername || !loginPassword) {
+      setLoginError('Enter username and password');
+      return;
+    }
+    setLoginLoading(true);
+    setLoginError(null);
+    try {
+      const data = await login({ username: loginUsername, password: loginPassword });
+      setAuthToken(data?.token || null);
+      setShowLoginModal(false);
+      setLoginUsername('');
+      setLoginPassword('');
+      // Retry pending comment after login
+      if (commentText.trim()) {
+        await handleSendComment();
+      }
+    } catch (e) {
+      setLoginError('Invalid credentials');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
 
   // Language options with their corresponding stream URLs
   const languages = [
@@ -55,53 +145,46 @@ export default function VideoDetail() {
             justify-content: center;
             align-items: center;
             height: 100vh;
-            font-family: Arial, sans-serif;
           }
           #player {
             width: 100%;
             height: 100%;
           }
-          .loading {
-            color: white;
-            text-align: center;
-            font-size: 16px;
-          }
-          .error {
-            color: red;
-            text-align: center;
-            font-size: 16px;
-          }
         </style>
       </head>
       <body>
-        <div id="player">
-          <div class="loading">Loading YouTube video: ${videoId}...</div>
-        </div>
+        <div id="player"></div>
         <script>
-          console.log('Starting YouTube player setup for video:', '${videoId}');
-          
           var tag = document.createElement('script');
           tag.src = "https://www.youtube.com/iframe_api";
           var firstScriptTag = document.getElementsByTagName('script')[0];
           firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 
           var player;
-          var timeoutId;
-          
-          function onYouTubeIframeAPIReady() {
-            console.log('YouTube API ready, creating player...');
-            try {
+          var currentHost = 'https://www.youtube-nocookie.com';
+          var triedAlternateHost = false;
+          var usedFallbackEmbed = false;
+
+          function createPlayer() {
+            if (player && player.destroy) {
+              try { player.destroy(); } catch (e) {}
+            }
+            var container = document.getElementById('player');
+            container.innerHTML = '';
             player = new YT.Player('player', {
               height: '100%',
               width: '100%',
               videoId: '${videoId}',
+              host: currentHost,
               playerVars: {
                 'autoplay': 1,
                 'playsinline': 1,
                 'modestbranding': 1,
                 'rel': 0,
                 'showinfo': 0,
-                'controls': 1
+                'controls': 1,
+                'enablejsapi': 1,
+                'origin': 'https://app.local'
               },
               events: {
                 'onReady': onPlayerReady,
@@ -109,62 +192,57 @@ export default function VideoDetail() {
                 'onError': onPlayerError
               }
             });
-              
-              // Set a timeout in case the API doesn't load
-              timeoutId = setTimeout(function() {
-                if (!player || !player.getPlayerState) {
-                  console.error('Player failed to initialize');
-                  window.ReactNativeWebView.postMessage('player_error:timeout');
-                }
-              }, 10000);
-            } catch (error) {
-              console.error('Error creating player:', error);
-              window.ReactNativeWebView.postMessage('player_error:creation');
-            }
+          }
+
+          function onYouTubeIframeAPIReady() {
+            createPlayer();
+          }
+
+          function renderFallbackEmbed() {
+            if (usedFallbackEmbed) return;
+            usedFallbackEmbed = true;
+            var container = document.getElementById('player');
+            var iframe = document.createElement('iframe');
+            var params = 'autoplay=1&playsinline=1&modestbranding=1&rel=0&controls=1';
+            iframe.src = 'https://www.youtube.com/embed/${videoId}?' + params;
+            iframe.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
+            iframe.style.width = '100%';
+            iframe.style.height = '100%';
+            iframe.style.border = '0';
+            container.innerHTML = '';
+            container.appendChild(iframe);
+            try { window.ReactNativeWebView.postMessage('fallback_embed'); } catch (e) {}
           }
 
           function onPlayerReady(event) {
-            console.log('Player is ready');
-            clearTimeout(timeoutId);
             window.ReactNativeWebView.postMessage('player_ready');
-            event.target.playVideo();
+            try {
+              event.target.mute();
+              event.target.playVideo();
+            } catch (e) {}
           }
 
           function onPlayerStateChange(event) {
-            console.log('Player state changed:', event.data);
             window.ReactNativeWebView.postMessage('player_state:' + event.data);
+            if (event.data === YT.PlayerState.PLAYING) {
+              try { event.target.unMute(); } catch (e) {}
+            }
           }
 
           function onPlayerError(event) {
-            console.error('Player error:', event.data);
-            clearTimeout(timeoutId);
-            window.ReactNativeWebView.postMessage('player_error:' + event.data);
-          }
-          
-          // Fallback if API doesn't load
-          setTimeout(function() {
-            if (typeof YT === 'undefined' || !YT.Player) {
-              console.error('YouTube API failed to load, trying direct iframe...');
-              try {
-                var iframe = document.createElement('iframe');
-                iframe.src = 'https://www.youtube.com/embed/${videoId}?autoplay=1&playsinline=1&modestbranding=1&rel=0&showinfo=0&controls=1';
-                iframe.width = '100%';
-                iframe.height = '100%';
-                iframe.frameBorder = '0';
-                iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
-                iframe.allowFullscreen = true;
-                
-                var playerDiv = document.getElementById('player');
-                playerDiv.innerHTML = '';
-                playerDiv.appendChild(iframe);
-                
-                window.ReactNativeWebView.postMessage('player_ready');
-              } catch (error) {
-                console.error('Fallback iframe also failed:', error);
-                window.ReactNativeWebView.postMessage('player_error:api_failed');
-              }
+            var code = event && event.data;
+            if ((code === 101 || code === 150 || code === 152 || code === 153) && !triedAlternateHost) {
+              triedAlternateHost = true;
+              currentHost = (currentHost === 'https://www.youtube-nocookie.com') ? 'https://www.youtube.com' : 'https://www.youtube-nocookie.com';
+              try { createPlayer(); } catch (e) { window.ReactNativeWebView.postMessage('player_error:' + code); }
+              return;
             }
-          }, 5000);
+            if ((code === 101 || code === 150 || code === 152 || code === 153) && !usedFallbackEmbed) {
+              renderFallbackEmbed();
+              return;
+            }
+            window.ReactNativeWebView.postMessage('player_error:' + code);
+          }
         </script>
       </body>
     </html>
@@ -190,29 +268,8 @@ export default function VideoDetail() {
     } else if (message.startsWith('player_error')) {
       const errorCode = message.split(':')[1];
       console.error('YouTube Player Error:', errorCode);
-      
-      // Handle specific error codes
-      if (errorCode === '150') {
-        Alert.alert(
-          'Video Not Available',
-          'This video cannot be played in the app. Would you like to watch it on YouTube instead?',
-          [
-            {
-              text: 'Cancel',
-              style: 'cancel',
-              onPress: () => router.back()
-            },
-            {
-              text: 'Watch on YouTube',
-              onPress: handleWatchFullVideo
-            }
-          ]
-        );
-      } else if (errorCode === 'timeout' || errorCode === 'creation' || errorCode === 'api_failed') {
-        setError('Failed to initialize video player. Please try again or watch on YouTube.');
-      } else {
-        setError('Failed to load video. Please try again.');
-      }
+      // Show in-app error only; no external redirection here
+      setError('Failed to load video. Please try again.');
     }
   };
 
@@ -266,16 +323,20 @@ export default function VideoDetail() {
           </View>
         )}
         <WebView
+          key={(videoId || youtubeUrl || '').toString()}
           ref={webViewRef}
           style={styles.video}
           javaScriptEnabled={true}
-          source={{ html: htmlContent }}
+          originWhitelist={["https://*"]}
+          source={{ html: htmlContent, baseUrl: 'https://app.local' }}
           allowsFullscreenVideo={true}
+          allowsInlineMediaPlayback={true}
           mediaPlaybackRequiresUserAction={false}
           domStorageEnabled={true}
           startInLoadingState={true}
           scalesPageToFit={true}
           mixedContentMode="always"
+          userAgent="Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36"
           onError={handleWebViewError}
           onLoad={handleWebViewLoad}
           onMessage={handleMessage}
@@ -321,68 +382,85 @@ export default function VideoDetail() {
       <View style={styles.tabContent}>
         {activeTab === 'keyTakeaways' && (
           <View style={styles.tabSection}>
-            <Text style={styles.tabSectionTitle}>Key Points from This Lesson</Text>
-            <View style={styles.keyPointItem}>
-              <Ionicons name="checkmark-circle" size={20} color="#27AE60" />
-              <Text style={styles.keyPointText}>Understanding the foundational principles of ministry</Text>
-            </View>
-            <View style={styles.keyPointItem}>
-              <Ionicons name="checkmark-circle" size={20} color="#27AE60" />
-              <Text style={styles.keyPointText}>Practical application of biblical teachings</Text>
-            </View>
-            <View style={styles.keyPointItem}>
-              <Ionicons name="checkmark-circle" size={20} color="#27AE60" />
-              <Text style={styles.keyPointText}>Building strong relationships with congregation</Text>
-            </View>
-            <View style={styles.keyPointItem}>
-              <Ionicons name="checkmark-circle" size={20} color="#27AE60" />
-              <Text style={styles.keyPointText}>Developing leadership skills for ministry</Text>
-            </View>
+            <Text style={styles.tabSectionTitle}>Key Takeaways</Text>
+            {detailsLoading ? (
+              <ActivityIndicator />
+            ) : keyTakeaways ? (
+              keyTakeaways.split('\n').map((line, idx) => (
+                <View key={idx} style={styles.keyPointItem}>
+                  <Ionicons name="checkmark-circle" size={20} color="#27AE60" />
+                  <Text style={styles.keyPointText}>{line}</Text>
+                </View>
+              ))
+            ) : (
+              <Text style={{ color: '#666' }}>No key takeaways provided.</Text>
+            )}
           </View>
         )}
 
         {activeTab === 'assignments' && (
           <View style={styles.tabSection}>
-            <Text style={styles.tabSectionTitle}>Your Assignments</Text>
-            <View style={styles.assignmentItem}>
-              <Ionicons name="document-text" size={20} color="#3498DB" />
-              <Text style={styles.assignmentText}>Read the recommended scripture passages</Text>
-            </View>
-            <View style={styles.assignmentItem}>
-              <Ionicons name="chatbubbles" size={20} color="#3498DB" />
-              <Text style={styles.assignmentText}>Reflect on how to apply these principles</Text>
-            </View>
-            <View style={styles.assignmentItem}>
-              <Ionicons name="people" size={20} color="#3498DB" />
-              <Text style={styles.assignmentText}>Practice with a small group or partner</Text>
-            </View>
-            <View style={styles.assignmentItem}>
-              <Ionicons name="book" size={20} color="#3498DB" />
-              <Text style={styles.assignmentText}>Write a 1-page reflection paper</Text>
-            </View>
+            <Text style={styles.tabSectionTitle}>Assignments</Text>
+            {detailsLoading ? (
+              <ActivityIndicator />
+            ) : assignments ? (
+              assignments.split('\n').map((line, idx) => (
+                <View key={idx} style={styles.assignmentItem}>
+                  <Ionicons name="document-text" size={20} color="#3498DB" />
+                  <Text style={styles.assignmentText}>{line}</Text>
+                </View>
+              ))
+            ) : (
+              <Text style={{ color: '#666' }}>No assignments provided.</Text>
+            )}
           </View>
         )}
 
         {activeTab === 'discussions' && (
-          <View style={styles.tabSection}>
-            <Text style={styles.tabSectionTitle}>Discussion Topics</Text>
-            <View style={styles.discussionItem}>
-              <Ionicons name="chatbubble-ellipses" size={20} color="#E74C3C" />
-              <Text style={styles.discussionText}>How can we better serve our community?</Text>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+            <View style={styles.tabSection}>
+              <Text style={styles.tabSectionTitle}>Comments</Text>
+              {commentsLoading ? (
+                <ActivityIndicator />
+              ) : (
+                <FlatList
+                  data={comments}
+                  keyExtractor={(item) => String(item.id)}
+                  renderItem={({ item }) => (
+                    <View style={{ marginBottom: 14 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                        <Ionicons name="person-circle" size={22} color="#999" />
+                        <Text style={{ marginLeft: 6, fontWeight: '600', color: '#2C3E50' }}>{item.user?.username || 'User'}</Text>
+                      </View>
+                      <Text style={{ color: '#2C3E50' }}>{item.text}</Text>
+                      {(item.replies || []).map((r) => (
+                        <View key={r.id} style={{ marginTop: 8, marginLeft: 28 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                            <Ionicons name="person" size={18} color="#bbb" />
+                            <Text style={{ marginLeft: 6, fontWeight: '600', color: '#2C3E50' }}>{r.user?.username || 'User'}</Text>
+                          </View>
+                          <Text style={{ color: '#2C3E50' }}>{r.text}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                  ListEmptyComponent={<Text style={{ color: '#666' }}>No comments yet.</Text>}
+                />
+              )}
             </View>
-            <View style={styles.discussionItem}>
-              <Ionicons name="chatbubble-ellipses" size={20} color="#E74C3C" />
-              <Text style={styles.discussionText}>What challenges do modern ministers face?</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 8, borderTopWidth: 1, borderColor: '#eee', backgroundColor: '#FFF' }}>
+              <TextInput
+                value={commentText}
+                onChangeText={setCommentText}
+                placeholder={authToken ? "Add a comment..." : "Sign in to comment..."}
+                style={{ flex: 1, paddingVertical: 10, paddingHorizontal: 12, backgroundColor: '#F5F5F7', borderRadius: 20 }}
+                onFocus={() => { if (!authToken) setShowLoginModal(true); }}
+              />
+              <TouchableOpacity onPress={handleSendComment} style={{ marginLeft: 10 }}>
+                <Ionicons name="send" size={22} color="#3498DB" />
+              </TouchableOpacity>
             </View>
-            <View style={styles.discussionItem}>
-              <Ionicons name="chatbubble-ellipses" size={20} color="#E74C3C" />
-              <Text style={styles.discussionText}>How to balance tradition with innovation?</Text>
-            </View>
-            <View style={styles.discussionItem}>
-              <Ionicons name="chatbubble-ellipses" size={20} color="#E74C3C" />
-              <Text style={styles.discussionText}>Building intergenerational connections</Text>
-            </View>
-          </View>
+          </KeyboardAvoidingView>
         )}
       </View>
 
@@ -422,6 +500,42 @@ export default function VideoDetail() {
             ))}
           </View>
       </TouchableOpacity>
+      </Modal>
+
+      {/* Login Modal for commenting */}
+      <Modal
+        visible={showLoginModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowLoginModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowLoginModal(false)}
+        >
+          <View style={styles.languageModal}>
+            <Text style={styles.languageModalTitle}>Sign in to comment</Text>
+            {loginError && <Text style={{ color: 'red', marginBottom: 8, textAlign: 'center' }}>{loginError}</Text>}
+            <TextInput
+              value={loginUsername}
+              onChangeText={setLoginUsername}
+              placeholder="Username"
+              autoCapitalize="none"
+              style={{ backgroundColor: '#F5F5F7', padding: 12, borderRadius: 8, marginBottom: 8 }}
+            />
+            <TextInput
+              value={loginPassword}
+              onChangeText={setLoginPassword}
+              placeholder="Password"
+              secureTextEntry
+              style={{ backgroundColor: '#F5F5F7', padding: 12, borderRadius: 8, marginBottom: 12 }}
+            />
+            <TouchableOpacity onPress={handleLogin} style={[styles.retryButton, { backgroundColor: '#3498DB', alignSelf: 'center' }]} disabled={loginLoading}>
+              <Text style={styles.retryButtonText}>{loginLoading ? 'Signing in...' : 'Sign In'}</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
       </Modal>
     </SafeAreaView>
   );
