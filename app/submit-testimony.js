@@ -29,17 +29,31 @@ export default function SubmitTestimony() {
 
   const pickVideo = async () => {
     try {
+      console.log('Launching video picker...');
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        mediaTypes: 'videos',  // Updated to use string value instead of MediaTypeOptions
         allowsEditing: true,
         quality: 1,
+        videoMaxDuration: 300, // 5 minutes max
+        videoQuality: 0.7,
       });
+      console.log('Video picker result:', result);
 
       if (!result.canceled) {
-        setVideoUri(result.assets[0].uri);
+        const video = result.assets[0];
+        console.log('Selected video:', {
+          uri: video.uri,
+          type: video.mimeType || 'video/mp4',
+          name: video.fileName || `testimony_${Date.now()}.mp4`,
+          size: video.fileSize
+        });
+        setVideoUri(video.uri);
+      } else {
+        console.log('User cancelled video selection');
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to pick video');
+      console.error('Error picking video:', error);
+      Alert.alert('Error', 'Failed to pick video. Please try again.');
     }
   };
 
@@ -57,23 +71,26 @@ export default function SubmitTestimony() {
       setSubmitting(true);
       setError(null);
 
-      const token = await AsyncStorage.getItem('userToken');
-      if (!token) {
-        Alert.alert('Error', 'Please login to submit a testimony');
-        router.push('/login');
-        return;
-      }
+      // No authentication required for submitting testimonies
 
       const formData = new FormData();
       formData.append('name', name.trim());
       formData.append('testimony_text', testimonyText.trim());
       
       if (videoUri) {
+        // Get file info for the video
+        const filename = videoUri.split('/').pop();
+        const match = /(\.\w+)(?:\?.*)?$/.exec(filename);
+        const ext = match ? match[1] : '.mp4';
+        const type = `video/${ext.replace('.', '')}`;
+        
         const videoFile = {
           uri: videoUri,
-          type: 'video/mp4',
-          name: 'testimony_video.mp4'
+          type: type,
+          name: `testimony_${Date.now()}${ext}`
         };
+        
+        console.log('Appending video file:', videoFile);
         formData.append('testimony_video', videoFile);
       }
 
@@ -84,21 +101,54 @@ export default function SubmitTestimony() {
         video_uri: videoUri
       });
 
+      console.log('Sending request to:', `${BASE_URL}/api/testimonies/`);
+      console.log('Request headers:', {
+        'Content-Type': 'multipart/form-data',
+      });
+      
+      // Log form data for debugging
+      for (let [key, value] of formData._parts) {
+        console.log(`Form Data - ${key}:`, value);
+      }
+
+      // Don't set Content-Type header - let the browser set it with the correct boundary
       const response = await fetch(`${BASE_URL}/api/testimonies/`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
         },
         body: formData
       });
 
       console.log('Response Status:', response.status);
-
-      const responseData = await response.json();
+      const responseData = await response.json().catch(e => ({}));
       console.log('Response Data:', responseData);
       
       if (!response.ok) {
-        throw new Error(responseData.error || 'Failed to submit testimony');
+        let errorMsg = 'Failed to submit testimony';
+        
+        if (responseData) {
+          if (typeof responseData === 'string') {
+            errorMsg = responseData;
+          } else if (responseData.detail) {
+            errorMsg = responseData.detail;
+          } else if (responseData.message) {
+            errorMsg = responseData.message;
+          } else if (responseData.testimony_video) {
+            errorMsg = `Video error: ${responseData.testimony_video.join(', ')}`;
+          } else if (typeof responseData === 'object') {
+            errorMsg = Object.values(responseData).flat().join(', ');
+          }
+        }
+        
+        console.error('Submission error:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorMsg,
+          responseData: responseData
+        });
+        
+        throw new Error(errorMsg);
       }
 
       Alert.alert(
@@ -118,6 +168,7 @@ export default function SubmitTestimony() {
     <KeyboardAvoidingView 
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={styles.container}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
     >
       <LinearGradient
         colors={['#1E3A8A', '#2563EB']}
@@ -128,7 +179,8 @@ export default function SubmitTestimony() {
 
       <ScrollView 
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 20 }]}
+        keyboardShouldPersistTaps="handled"
       >
         <View style={styles.formContainer}>
           <TextInput
@@ -154,13 +206,20 @@ export default function SubmitTestimony() {
                 style={styles.uploadButton}
                 onPress={pickVideo}
               >
-                <Ionicons name="cloud-upload" size={40} color="#1E3A8A" />
+                <Ionicons 
+                  name={videoUri ? "checkmark-circle" : "cloud-upload"} 
+                  size={40} 
+                  color={videoUri ? "#4CAF50" : "#1E3A8A"} 
+                />
                 <Text style={styles.uploadText}>
                   {videoUri ? 'Change Video' : 'Upload Video'}
                 </Text>
               </TouchableOpacity>
               {videoUri && (
-                <Text style={styles.videoSelected}>Video selected successfully</Text>
+                <View style={styles.videoInfo}>
+                  <Ionicons name="videocam" size={16} color="#4CAF50" />
+                  <Text style={styles.videoSelected}>Video selected</Text>
+                </View>
               )}
             </View>
           </View>
@@ -262,10 +321,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 10,
   },
+  videoInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
   videoSelected: {
-    color: '#008000',
-    marginTop: 10,
-    fontSize: 16,
+    color: '#4CAF50',
+    marginLeft: 4,
+    fontSize: 14,
+    fontWeight: '500',
   },
   errorText: {
     color: '#FF3B30',
@@ -278,7 +343,13 @@ const styles = StyleSheet.create({
     padding: 15,
     borderRadius: 10,
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 20,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   submitButtonDisabled: {
     opacity: 0.7,

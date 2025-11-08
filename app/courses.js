@@ -185,11 +185,33 @@ export default function KingdomLeadership() {
               </View>
             )}
             {!loadingCourses && courses.length > 0 && (
-              <LinearGradient colors={["#3498DB", "#2980B9"]} style={styles.welcomeSection}>
-                <Ionicons name="school" size={32} color="#FFF" />
-                <Text style={styles.welcomeTitle}>Welcome to Sons of John Chi</Text>
-                <Text style={styles.welcomeSubtitle}>Explore our courses</Text>
-              </LinearGradient>
+              <>
+                <LinearGradient colors={["#3498DB", "#2980B9"]} style={styles.welcomeSection}>
+                  <Ionicons name="school" size={32} color="#FFF" />
+                  <Text style={styles.welcomeTitle}>Welcome to Sons of John Chi</Text>
+                  <Text style={styles.welcomeSubtitle}>Explore our courses</Text>
+                </LinearGradient>
+                
+                {/* Live Stream Button - Below Welcome */}
+                <TouchableOpacity 
+                  style={[styles.liveButton, { marginTop: 10 }]}
+                  onPress={() => router.push("/livestreaming")}
+                >
+                  <LinearGradient
+                    colors={["#FF416C", "#FF4B2B"]}
+                    style={styles.liveButtonGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                  >
+                    <Ionicons name="radio" size={20} color="white" style={styles.liveIcon} />
+                    <Text style={styles.liveButtonText}>Watch Live Stream</Text>
+                    <View style={styles.liveBadge}>
+                      <View style={styles.livePulse} />
+                      <Text style={styles.liveBadgeText}>LIVE</Text>
+                    </View>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </>
             )}
             {/* Courses Grid */}
             <View style={styles.modulesContainer}>
@@ -410,32 +432,52 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   liveButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.3)",
+    marginHorizontal: 20,
+    marginTop: 15,
+    marginBottom: 10,
+    borderRadius: 25,
+    overflow: 'hidden',
+    elevation: 5,
+    shadowColor: '#FF416C',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
   },
-  liveIndicator: {
+  liveButtonGradient: {
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  liveIcon: {
+    marginRight: 10,
+  },
+  liveButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  liveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginLeft: 10,
+  },
+  livePulse: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#FF4444",
-    marginRight: 6,
-    shadowColor: "#FF4444",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: '#FF0000',
+    marginRight: 4,
   },
-  liveText: {
-    color: "#FFF",
+  liveBadgeText: {
+    color: 'white',
     fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0.5,
+    fontWeight: 'bold',
   },
   scrollView: {
     flex: 1,
@@ -453,10 +495,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   welcomeSubtitle: {
-    fontSize: 16,
-    color: "#7F8C8D",
+    fontSize: 15,
+    color: "#FFFFFF",
     textAlign: "center",
-    lineHeight: 24,
+    lineHeight: 22,
+    opacity: 0.9,
   },
   modulesContainer: {
     padding: 20,
@@ -596,35 +639,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   welcomeTitle: {
-    color: "#FFF",
-    fontSize: 20,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-  welcomeSubtitle: {
-    color: "#EAF2F8",
-    fontSize: 14,
-    textAlign: "center",
-  },
-  videosSectionTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#2C3E50",
-    marginBottom: 15,
-  },
-  videoCard: {
     width: "100%",
-    backgroundColor: "#FFF",
-    borderRadius: 15,
-    marginBottom: 20,
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    overflow: "hidden",
-    flexDirection: "row",
-    alignItems: "center",
+    marginBottom: 10,
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   videoThumbnail: {
     width: 100,

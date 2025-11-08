@@ -1,205 +1,404 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useEffect } from "react"
+import AsyncStorage from "@react-native-async-storage/async-storage"
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  TextInput,
-  TouchableOpacity,
-  SafeAreaView,
-  KeyboardAvoidingView,
-  Platform,
+  ActivityIndicator,
   Dimensions,
+  SafeAreaView,
+  Platform,
+  Linking,
+  TouchableWithoutFeedback
 } from "react-native"
+import { WebView } from 'react-native-webview';
 import { Ionicons } from "@expo/vector-icons"
 import { LinearGradient } from "expo-linear-gradient"
+import { BASE_URL } from "./base_url"
 
-const { width, height } = Dimensions.get("window")
+const { width } = Dimensions.get("window")
 
-interface Comment {
-  id: string
-  username: string
-  message: string
-  timestamp: string
-  isVerified?: boolean
+interface Stream {
+  id: number
+  title: string
+  description: string
+  stream_type: 'live' | 'regular'
+  youtube_url: string
+  is_active: boolean
+  start_time: string
 }
 
 const LiveStreamScreen = () => {
-  const [comments, setComments] = useState<Comment[]>([
-    {
-      id: "1",
-      username: "Pastor John",
-      message: "Welcome everyone to our live service! God bless you all.",
-      timestamp: "2 min ago",
-      isVerified: true,
-    },
-    {
-      id: "2",
-      username: "Sarah M.",
-      message: "Praise the Lord! So blessed to be here.",
-      timestamp: "1 min ago",
-    },
-    {
-      id: "3",
-      username: "David K.",
-      message: "Amen! Thank you for this wonderful message.",
-      timestamp: "30 sec ago",
-    },
-    {
-      id: "4",
-      username: "Grace L.",
-      message: "Praying for everyone watching today 🙏",
-      timestamp: "15 sec ago",
-    },
-    {
-      id: "5",
-      username: "Michael R.",
-      message: "God is good all the time!",
-      timestamp: "5 sec ago",
-    },
-  ])
+  const [stream, setStream] = useState<Stream | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const [newComment, setNewComment] = useState("")
-  const [isLive, setIsLive] = useState(true)
-  const [viewerCount, setViewerCount] = useState(247)
-  const scrollViewRef = useRef<ScrollView>(null)
+  const [isStreamPlaying, setIsStreamPlaying] = useState(false)
 
-  // Simulate new comments coming in
   useEffect(() => {
-    const interval = setInterval(() => {
-      const sampleComments = [
-        "Hallelujah!",
-        "God bless this ministry",
-        "Amen to that!",
-        "Praying with you all",
-        "Thank you Pastor",
-        "Glory to God!",
-      ]
-
-      const randomComment = sampleComments[Math.floor(Math.random() * sampleComments.length)]
-      const newCommentObj: Comment = {
-        id: Date.now().toString(),
-        username: `User${Math.floor(Math.random() * 1000)}`,
-        message: randomComment,
-        timestamp: "now",
-      }
-
-      setComments((prev) => [...prev, newCommentObj])
-      setViewerCount((prev) => prev + Math.floor(Math.random() * 3) - 1)
-    }, 8000)
-
-    return () => clearInterval(interval)
-  }, [])
-
-  // Auto-scroll to bottom when new comments arrive
-  useEffect(() => {
-    scrollViewRef.current?.scrollToEnd({ animated: true })
-  }, [comments])
-
-  const handleSendComment = () => {
-    if (newComment.trim()) {
-      const comment: Comment = {
-        id: Date.now().toString(),
-        username: "You",
-        message: newComment.trim(),
-        timestamp: "now",
-      }
-      setComments((prev) => [...prev, comment])
-      setNewComment("")
+    fetchActiveStream()
+    
+    // Only set up refresh if we don't have an active stream yet
+    if (!isStreamPlaying) {
+      const interval = setInterval(() => {
+        if (!isStreamPlaying) {
+          fetchActiveStream()
+        }
+      }, 30000) // Check every 30 seconds, but only if not already playing
+      
+      return () => clearInterval(interval)
     }
+  }, [isStreamPlaying])
+
+  const fetchActiveStream = async () => {
+    try {
+      setLoading(true)
+      
+      // Try different possible endpoints
+      const endpoints = [
+        '/api/streams/active/',
+        '/api/stream/active/',
+        '/streams/active/'
+      ]
+      
+      let response = null
+      let lastError = null
+      
+      // Try each endpoint until one works
+      for (const endpoint of endpoints) {
+        const url = `${BASE_URL}${endpoint}`
+        console.log('Trying endpoint:', url)
+        
+        try {
+          const res = await fetch(url, {
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json'
+            }
+          })
+          
+          const contentType = res.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            response = res
+            break
+          }
+        } catch (err) {
+          lastError = err
+          console.log(`Endpoint ${endpoint} failed:`, err.message)
+          continue
+        }
+      }
+      
+      if (!response) {
+        throw lastError || new Error('Failed to connect to any stream endpoints')
+      }
+      
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Non-JSON response received from:', response.url);
+        console.error('Response start:', text.substring(0, 200));
+        throw new Error('Server returned non-JSON response. Please check the API endpoint.');
+      }
+      
+      const data = await response.json()
+      console.log('Stream API response:', data)
+      
+      if (!response.ok) {
+        throw new Error(data.detail || `HTTP error! status: ${response.status}`)
+      }
+      
+      if (!data || !data.id) {
+        throw new Error('Invalid stream data received')
+      }
+      
+      if (!data.is_active) {
+        throw new Error('The stream exists but is not marked as active')
+      }
+      
+      setStream(data)
+      setError(null)
+    } catch (err) {
+      console.error('Error details:', {
+        name: err.name,
+        message: err.message,
+        stack: err.stack
+      });
+      setError(err.message || 'No live stream is currently active. Please check the stream URL and try again.')
+      setStream(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const extractVideoId = (url: string) => {
+    if (!url) return null;
+    const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/
+    const match = url.match(regExp)
+    return (match && match[7]?.length === 11) ? match[7] : null
+  }
+
+  const createHtmlContent = (videoId: string) => `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { 
+            margin: 0; 
+            background-color: black;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+          }
+          #player {
+            width: 100%;
+            height: 100%;
+          }
+          .error-message {
+            color: white;
+            text-align: center;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+          }
+        </style>
+      </head>
+      <body>
+        <div id="player"></div>
+        <script>
+          var tag = document.createElement('script');
+          tag.src = "https://www.youtube.com/iframe_api";
+          var firstScriptTag = document.getElementsByTagName('script')[0];
+          firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+          var player;
+          var currentHost = 'https://www.youtube-nocookie.com';
+          var triedAlternateHost = false;
+          var usedFallbackEmbed = false;
+
+          function createPlayer() {
+            if (player && player.destroy) {
+              try { player.destroy(); } catch (e) {}
+            }
+            var container = document.getElementById('player');
+            container.innerHTML = '';
+            player = new YT.Player('player', {
+              height: '100%',
+              width: '100%',
+              videoId: '${videoId}',
+              host: currentHost,
+              playerVars: {
+                'autoplay': 1,
+                'playsinline': 1,
+                'modestbranding': 1,
+                'rel': 0,
+                'showinfo': 0,
+                'controls': 0,
+                'disablekb': 1,
+                'fs': 0,
+                'iv_load_policy': 3,
+                'origin': 'https://app.local',
+                'playlist': '${videoId}',
+                'enablejsapi': 1,
+                'cc_load_policy': 0, // Hide closed captions button
+                'color': 'white', // Hide the progress bar color
+                'widget_referrer': window.location.href, // Prevent showing related videos
+                'wmode': 'opaque', // Prevent flash of controls on some devices
+                'playsinline': 1, // Force inline playback on iOS
+                'origin': window.location.origin, // Prevent security errors
+                'enablejsapi': 1,
+                'widgetid': 1
+              },
+              events: {
+                'onReady': onPlayerReady,
+                'onStateChange': onPlayerStateChange,
+                'onError': onPlayerError
+              }
+            });
+          }
+
+          function onYouTubeIframeAPIReady() {
+            createPlayer();
+          }
+
+          function renderFallbackEmbed() {
+            if (usedFallbackEmbed) return;
+            usedFallbackEmbed = true;
+            var container = document.getElementById('player');
+            var iframe = document.createElement('iframe');
+            var params = 'autoplay=1&playsinline=1&modestbranding=1&rel=0&controls=0&disablekb=1&fs=0&iv_load_policy=3';
+            iframe.src = 'https://www.youtube.com/embed/${videoId}?' + params;
+            iframe.allow = 'autoplay; encrypted-media';
+            iframe.setAttribute('allowfullscreen', 'false');
+            iframe.setAttribute('webkitallowfullscreen', 'false');
+            iframe.setAttribute('mozallowfullscreen', 'false');
+            iframe.setAttribute('frameborder', '0');
+            iframe.setAttribute('scrolling', 'no');
+            iframe.setAttribute('allow', 'autoplay');
+            iframe.setAttribute('allowtransparency', 'true');
+            iframe.style.pointerEvents = 'none';
+            iframe.style.width = '100%';
+            iframe.style.height = '100%';
+            iframe.style.border = '0';
+            container.innerHTML = '';
+            container.appendChild(iframe);
+            try { window.ReactNativeWebView.postMessage('fallback_embed'); } catch (e) {}
+          }
+
+          function onPlayerReady(event) {
+            console.log('Player is ready');
+            window.ReactNativeWebView.postMessage('player_ready');
+            try {
+              // Autoplay policies on mobile often require muted start
+              event.target.mute();
+              event.target.playVideo();
+            } catch (e) {
+              console.error('Autoplay attempt failed', e);
+            }
+          }
+
+          function onPlayerStateChange(event) {
+            console.log('Player state changed:', event.data);
+            window.ReactNativeWebView.postMessage('player_state:' + event.data);
+            
+            // When playback starts, unmute for normal audio and mark as playing
+            if (event.data === YT.PlayerState.PLAYING) {
+              try { 
+                event.target.unMute();
+                window.ReactNativeWebView.postMessage('player_playing');
+              } catch (e) {}
+            }
+          }
+
+          function onPlayerError(event) {
+            var code = event && event.data;
+            console.error('Player error:', code);
+            // Retry with alternate host if embed-restriction errors occur
+            if ((code === 101 || code === 150 || code === 152 || code === 153) && !triedAlternateHost) {
+              triedAlternateHost = true;
+              currentHost = (currentHost === 'https://www.youtube-nocookie.com')
+                ? 'https://www.youtube.com'
+                : 'https://www.youtube-nocookie.com';
+              try { createPlayer(); } catch (e) {
+                window.ReactNativeWebView.postMessage('player_error:' + code);
+              }
+              return;
+            }
+            // As a last resort, render a plain iframe embed to keep playback in-app
+            if ((code === 101 || code === 150 || code === 152 || code === 153) && !usedFallbackEmbed) {
+              renderFallbackEmbed();
+              return;
+            }
+            window.ReactNativeWebView.postMessage('player_error:' + code);
+          }
+        </script>
+      </body>
+    </html>
+  `;
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#3498DB" />
+        <Text style={styles.loadingText}>Loading stream...</Text>
+      </View>
+    )
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-        {/* Header */}
-        <LinearGradient colors={["#1e67cd", "#4f83e0"]} style={styles.header}>
-          <View style={styles.headerContent}>
-          
-            <View style={styles.headerInfo}>
-              <Text style={styles.headerTitle}>Sons of John Chi</Text>
-              <View style={styles.liveIndicator}>
-                <View style={styles.liveDot} />
-                <Text style={styles.liveText}>LIVE</Text>
-                <Text style={styles.viewerCount}>{viewerCount} watching</Text>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Live Stream</Text>
+      </View>
+
+      {error ? (
+        <View style={styles.errorContainer}>
+          <Ionicons name="sad-outline" size={60} color="#666" />
+          <Text style={styles.errorText}>{error}</Text>
+          <Text style={styles.errorSubtext}>Please check back later for upcoming streams.</Text>
+        </View>
+      ) : stream ? (
+        <>
+          {/* Video Player */}
+          <View style={styles.videoContainer}>
+            <TouchableWithoutFeedback>
+              <View style={styles.touchBlock}>
+                <WebView
+              style={styles.video}
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
+              source={{
+                html: createHtmlContent(extractVideoId(stream.youtube_url) || ''),
+                baseUrl: 'https://app.local'
+              }}
+              allowsFullscreenVideo={true}
+              allowsInlineMediaPlayback={true}
+              startInLoadingState={true}
+              mediaPlaybackRequiresUserAction={false}
+              mixedContentMode="always"
+              onMessage={(event) => {
+                const message = event.nativeEvent.data;
+                console.log('WebView message:', message);
+                if (message.startsWith('player_error')) {
+                  const errorCode = message.split(':')[1];
+                  console.error('YouTube Player Error:', errorCode);
+                  setIsStreamPlaying(false);
+                } else if (message === 'player_playing') {
+                  setIsStreamPlaying(true);
+                }
+              }}
+              renderLoading={() => (
+                <View style={styles.loadingVideo}>
+                  <ActivityIndicator size="large" color="#3498DB" />
+                  <Text style={styles.loadingText}>Loading stream...</Text>
+                </View>
+              )}
+            />
+            </View>
+            </TouchableWithoutFeedback>
+          </View>
+
+          {/* Stream Info */}
+          <View style={styles.infoContainer}>
+            <Text style={styles.streamTitle}>{stream.title}</Text>
+            <Text style={styles.streamDescription}>
+              {stream.description || 'Join us for this live stream.'}
+            </Text>
+            <View style={styles.statsContainer}>
+              <View style={styles.statItem}>
+                <Ionicons name="time" size={20} color="#666" />
+                <Text style={styles.statText}>
+                  {new Date(stream.start_time).toLocaleString()}
+                </Text>
+              </View>
+              <View style={[styles.statItem, { backgroundColor: '#FF3B30' }]} >
+                <Ionicons name="radio" size={16} color="white" />
+                <Text style={[styles.statText, { color: 'white' }]}>
+                  {stream.stream_type === 'live' ? 'Live Now' : 'Video'}
+                </Text>
               </View>
             </View>
-            <TouchableOpacity style={styles.shareButton}>
-              <Ionicons name="share-outline" size={24} color="#ffffff" />
-            </TouchableOpacity>
           </View>
-        </LinearGradient>
+        </>
+      ) : null}
 
-        {/* Video Player Area */}
-        <View style={styles.videoContainer}>
-          <View style={styles.videoPlaceholder}>
-            <LinearGradient
-              colors={["rgba(30, 103, 205, 0.1)", "rgba(79, 131, 224, 0.1)"]}
-              style={styles.videoGradient}
-            >
-              <Ionicons name="play-circle" size={80} color="#1e67cd" />
-              <Text style={styles.videoText}>Live Stream</Text>
-            </LinearGradient>
-          </View>
-
-          {/* Video Controls Overlay */}
-          <View style={styles.videoControls}>
-            <TouchableOpacity style={styles.controlButton}>
-              <Ionicons name="volume-high" size={20} color="#ffffff" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.controlButton}>
-              <Ionicons name="expand" size={20} color="#ffffff" />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Comments Section */}
-        <View style={styles.commentsSection}>
-          <View style={styles.commentsHeader}>
-            <Text style={styles.commentsTitle}>Live Chat</Text>
-            <Text style={styles.commentsCount}>{comments.length} messages</Text>
-          </View>
-
-          <ScrollView ref={scrollViewRef} style={styles.commentsContainer} showsVerticalScrollIndicator={false}>
-            {comments.map((comment) => (
-              <View key={comment.id} style={styles.commentItem}>
-                <View style={styles.commentHeader}>
-                  <Text style={styles.commentUsername}>
-                    {comment.username}
-                    {comment.isVerified && (
-                      <Ionicons name="checkmark-circle" size={14} color="#1e67cd" style={styles.verifiedIcon} />
-                    )}
-                  </Text>
-                  <Text style={styles.commentTimestamp}>{comment.timestamp}</Text>
-                </View>
-                <Text style={styles.commentMessage}>{comment.message}</Text>
-              </View>
-            ))}
-          </ScrollView>
-
-          {/* Comment Input */}
-          <View style={styles.commentInputContainer}>
-            <TextInput
-              style={styles.commentInput}
-              placeholder="Type your message..."
-              placeholderTextColor="#9ca3af"
-              value={newComment}
-              onChangeText={setNewComment}
-              multiline
-              maxLength={200}
-            />
-            <TouchableOpacity
-              style={[styles.sendButton, newComment.trim() ? styles.sendButtonActive : null]}
-              onPress={handleSendComment}
-              disabled={!newComment.trim()}
-            >
-              <Ionicons name="send" size={20} color={newComment.trim() ? "#ffffff" : "#9ca3af"} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
+      {/* Footer */}
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>
+          Having issues? Try watching on{' '}
+          <Text 
+            style={styles.linkText}
+            onPress={() => stream?.youtube_url && Linking.openURL(stream.youtube_url)}
+          >
+            YouTube
+          </Text>
+        </Text>
+      </View>
     </SafeAreaView>
   )
 }
@@ -207,181 +406,126 @@ const LiveStreamScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#FFFFFF",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  loadingVideo: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000',
+  },
+  loadingText: {
+    color: '#fff',
+    marginTop: 10,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#FFFFFF',
+  },
+  errorText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333333',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  errorSubtext: {
+    fontSize: 14,
+    color: '#666666',
+    marginTop: 8,
+    textAlign: 'center',
   },
   header: {
-    paddingTop: 10,
-    paddingBottom: 15,
-    paddingHorizontal: 20,
-  },
-  headerContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  backButton: {
-    padding: 5,
-  },
-  headerInfo: {
-    flex: 1,
-    alignItems: "center",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#EAEAEA",
+    backgroundColor: "#FFFFFF",
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#ffffff",
-    marginBottom: 4,
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#000000",
+    textAlign: "center",
   },
-  liveIndicator: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  liveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#ef4444",
-    marginRight: 6,
-  },
-  liveText: {
-    fontSize: 12,
-    fontWeight: "bold",
-    color: "#ffffff",
-    marginRight: 8,
-  },
-  viewerCount: {
-    fontSize: 12,
-    color: "#ffffff",
-    opacity: 0.8,
-  },
-  shareButton: {
-    padding: 5,
+  touchBlock: {
+    flex: 1,
+    backgroundColor: 'transparent',
   },
   videoContainer: {
-    height: height * 0.35,
-    backgroundColor: "#000000",
-    position: "relative",
+    width: '100%',
+    height: 300,
+    backgroundColor: '#000',
+    marginBottom: 15,
+    overflow: 'hidden',
+    position: 'relative',
+    zIndex: 0,
   },
-  videoPlaceholder: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+  video: {
+    width: '100%',
+    height: '100%',
+    pointerEvents: 'none',
+    backgroundColor: '#000',
+    zIndex: 1
   },
-  videoGradient: {
-    flex: 1,
-    width: "100%",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  videoText: {
-    fontSize: 16,
-    color: "#1e67cd",
-    marginTop: 10,
-    fontWeight: "600",
-  },
-  videoControls: {
-    position: "absolute",
-    bottom: 15,
-    right: 15,
-    flexDirection: "row",
-  },
-  controlButton: {
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    padding: 8,
-    borderRadius: 20,
-    marginLeft: 10,
-  },
-  commentsSection: {
-    flex: 1,
-    backgroundColor: "#f8fafc",
-  },
-  commentsHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    backgroundColor: "#ffffff",
+  infoContainer: {
+    padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: "#EAEAEA",
   },
-  commentsTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#374151",
+  streamTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#000000",
+    marginBottom: 8,
   },
-  commentsCount: {
-    fontSize: 12,
-    color: "#6b7280",
-  },
-  commentsContainer: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
-  commentItem: {
-    backgroundColor: "#ffffff",
-    padding: 12,
-    marginVertical: 4,
-    borderRadius: 8,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  commentHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  commentUsername: {
+  streamDescription: {
     fontSize: 14,
-    fontWeight: "bold",
-    color: "#1e67cd",
+    color: "#666666",
+    marginBottom: 12,
+  },
+  statsContainer: {
     flexDirection: "row",
     alignItems: "center",
+    flexWrap: 'wrap',
   },
-  verifiedIcon: {
-    marginLeft: 4,
-  },
-  commentTimestamp: {
-    fontSize: 12,
-    color: "#6b7280",
-  },
-  commentMessage: {
-    fontSize: 14,
-    color: "#374151",
-    lineHeight: 20,
-  },
-  commentInputContainer: {
+  statItem: {
     flexDirection: "row",
-    alignItems: "flex-end",
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    backgroundColor: "#ffffff",
+    alignItems: "center",
+    marginRight: 16,
+    marginBottom: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: '#F5F5F5',
+  },
+  statText: {
+    fontSize: 14,
+    color: "#666666",
+    marginLeft: 6,
+  },
+  footer: {
+    padding: 16,
     borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
+    borderTopColor: "#EAEAEA",
+    backgroundColor: "#FFFFFF",
   },
-  commentInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 20,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    marginRight: 10,
-    maxHeight: 80,
+  footerText: {
+    textAlign: 'center',
+    color: '#666666',
     fontSize: 14,
-    color: "#374151",
-    backgroundColor: "#f8fafc",
   },
-  sendButton: {
-    backgroundColor: "#e5e7eb",
-    padding: 10,
+  linkText: {
+    color: '#3498DB',
+    textDecorationLine: 'underline',
     borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",

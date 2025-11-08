@@ -15,6 +15,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
+import { BASE_URL } from "../base_url"
 
 export default function SonsApplication() {
   const router = useRouter()
@@ -29,6 +30,9 @@ export default function SonsApplication() {
     whyJoin: "",
     commitment: "",
   })
+  const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
+  const [loading, setLoading] = useState(false)
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({
@@ -37,22 +41,62 @@ export default function SonsApplication() {
     }))
   }
 
-
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     // Validate required fields
-    const requiredFields = ["fullName", "email", "phone", "testimony", "whyJoin"]
-    const missingFields = requiredFields.filter((field) => !formData[field].trim())
-
-    if (missingFields.length > 0) {
-      Alert.alert("Missing Information", "Please fill in all required fields.")
+    const missing = []
+    if (!formData.fullName) missing.push("Full Name")
+    if (!formData.email) missing.push("Email")
+    if (!formData.phone) missing.push("Phone")
+    if (!formData.whyJoin && !formData.testimony) missing.push("Your Interest")
+    if (!formData.commitment && !formData.testimony) missing.push("Your Goals")
+    if (!username) missing.push("Username")
+    if (!password) missing.push("Password")
+    if (missing.length) {
+      Alert.alert("Missing Information", `Please fill: ${missing.join(", ")}`)
       return
     }
 
-    Alert.alert(
-      "Application Submitted",
-      "Thank you for your application to become a Son of John Chi. We will review your application and get back to you soon.",
-      [{ text: "OK" }],
-    )
+    setLoading(true)
+    try {
+      const payload = {
+        application_type: "sons_of_john_chi",
+        full_name: formData.fullName,
+        email: formData.email,
+        phone_number: formData.phone,
+        your_interest: formData.whyJoin || formData.testimony,
+        your_goals: formData.commitment || formData.testimony,
+        username,
+        password,
+      }
+      const res = await fetch(`${BASE_URL}/api/applications/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        let msg = 'Failed to submit application'
+        try { const err = await res.json(); msg = typeof err === 'string' ? err : JSON.stringify(err) } catch {}
+        throw new Error(msg)
+      }
+      Alert.alert('Success', 'Application submitted! You can now log in while pending review.')
+      setFormData({
+        fullName: "",
+        email: "",
+        phone: "",
+        address: "",
+        dateOfBirth: "",
+        occupation: "",
+        testimony: "",
+        whyJoin: "",
+        commitment: "",
+      })
+      setUsername("")
+      setPassword("")
+    } catch (e) {
+      Alert.alert('Error', e.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -197,11 +241,42 @@ export default function SonsApplication() {
               />
             </View>
 
+            {/* Account Credentials */}
+            <Text style={styles.sectionTitle}>Account</Text>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Desired Username *</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Choose a username"
+                autoCapitalize="none"
+                value={username}
+                onChangeText={setUsername}
+                placeholderTextColor="#999"
+              />
+            </View>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Password *</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Enter a password"
+                secureTextEntry
+                value={password}
+                onChangeText={setPassword}
+                placeholderTextColor="#999"
+              />
+            </View>
+
             {/* Submit Button */}
-            <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-              <LinearGradient colors={["#1e67cd", "#1e67cd"]} style={styles.submitGradient}>
-                <Ionicons name="send" size={20} color="#FFF" style={styles.submitIcon} />
-                <Text style={styles.submitText}>Submit Application</Text>
+            <TouchableOpacity style={[styles.submitButton, loading && { opacity: 0.7 }]} onPress={handleSubmit} disabled={loading}>
+              <LinearGradient colors={loading ? ["#9bbcf0", "#9bbcf0"] : ["#1e67cd", "#1e67cd"]} style={styles.submitGradient}>
+                {loading ? (
+                  <Text style={styles.submitText}>Submitting...</Text>
+                ) : (
+                  <>
+                    <Ionicons name="send" size={20} color="#FFF" style={styles.submitIcon} />
+                    <Text style={styles.submitText}>Submit Application</Text>
+                  </>
+                )}
               </LinearGradient>
             </TouchableOpacity>
 

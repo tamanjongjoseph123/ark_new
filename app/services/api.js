@@ -208,8 +208,14 @@ export const postComment = async ({ token, video, text, parent = null }) => {
 // Auth
 export const login = async ({ username, password }) => {
     try {
-        const response = await api.post('/api/auth/login', { username, password });
-        return response.data; // { token, refresh, user }
+        const response = await api.post('/api/applications/login/', { username, password });
+        // Store tokens if needed
+        if (response.data.access) {
+            // You can store tokens in AsyncStorage or your state management here
+            // await AsyncStorage.setItem('authToken', response.data.access);
+            // await AsyncStorage.setItem('refreshToken', response.data.refresh);
+        }
+        return response.data; // { access, refresh, user, application_type }
     } catch (error) {
         console.error('Login failed:', error?.response?.data || error?.message);
         throw error;

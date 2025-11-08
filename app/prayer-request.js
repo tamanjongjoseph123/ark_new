@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import {
   View,
   Text,
@@ -11,10 +11,14 @@ import {
   Alert,
   SafeAreaView,
   ActivityIndicator,
+  Platform,
+  TouchableWithoutFeedback
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { submitPrayerRequest } from "./services/api"
+import { WebView } from 'react-native-webview';
+import { BASE_URL } from "./base_url";
 
 export default function PrayerRequest() {
   const router = useRouter()
@@ -26,6 +30,153 @@ export default function PrayerRequest() {
   const [isConfidential, setIsConfidential] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [errors, setErrors] = useState({})
+  const [prayerRoom, setPrayerRoom] = useState(null)
+  const [isLoadingPrayerRoom, setIsLoadingPrayerRoom] = useState(true)
+  const webViewRef = useRef(null)
+
+  // Fetch prayer room status
+  const fetchPrayerRoom = async () => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/prayer-room/`);
+      const data = await response.json();
+      setPrayerRoom(data);
+    } catch (error) {
+      console.error('Error fetching prayer room:', error);
+    } finally {
+      setIsLoadingPrayerRoom(false);
+    }
+  };
+
+  // Initial fetch and set up polling
+  useEffect(() => {
+    fetchPrayerRoom();
+    const interval = setInterval(fetchPrayerRoom, 30000); // Poll every 30 seconds
+    return () => clearInterval(interval);
+  }, []);
+
+  // Extract YouTube video ID from URL
+  const extractYouTubeId = (url) => {
+    if (!url) return null;
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  };
+
+  // HTML template for audio-only YouTube player
+  const getAudioOnlyHtml = (videoId) => `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+      <style>
+        body, html { 
+          margin: 0; 
+          padding: 0; 
+          background-color: transparent;
+          overflow: hidden;
+          height: 100%;
+          width: 100%;
+        }
+        #player {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          opacity: 0;
+          pointer-events: none;
+        }
+        .audio-container {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          height: 100%;
+          padding: 20px;
+        }
+        .audio-wave {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          height: 60px;
+          width: 100%;
+          gap: 4px;
+        }
+        .wave-bar {
+          width: 4px;
+          background-color: #1e67cd;
+          border-radius: 2px;
+          animation: wave 1.5s ease-in-out infinite;
+        }
+        @keyframes wave {
+          0%, 100% { transform: scaleY(0.5); }
+          50% { transform: scaleY(1.5); }
+        }
+      </style>
+    </head>
+    <body>
+      <div id="player"></div>
+      <script>
+        var tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        var firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+        var player;
+        function onYouTubeIframeAPIReady() {
+          player = new YT.Player('player', {
+            height: '1',
+            width: '1',
+            videoId: '${videoId}',
+            playerVars: {
+              'autoplay': 1,
+              'controls': 0,
+              'disablekb': 1,
+              'fs': 0,
+              'iv_load_policy': 3,
+              'modestbranding': 1,
+              'playsinline': 1,
+              'rel': 0,
+              'showinfo': 0,
+              'enablejsapi': 1
+            },
+            events: {
+              'onReady': onPlayerReady,
+              'onStateChange': onPlayerStateChange
+            }
+          });
+        }
+
+        function onPlayerReady(event) {
+          event.target.playVideo();
+          event.target.mute(); // Start muted to avoid autoplay issues
+          setTimeout(() => {
+            event.target.unMute(); // Unmute after a short delay
+          }, 1000);
+          
+          // Notify React Native that player is ready
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage('player_ready');
+          }
+        }
+
+        function onPlayerStateChange(event) {
+          if (event.data === YT.PlayerState.PLAYING) {
+            // Player started playing
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage('player_playing');
+            }
+          }
+        }
+      </script>
+    </body>
+    </html>
+  `;
+
+  // Handle WebView messages
+  const handleWebViewMessage = (event) => {
+    const message = event.nativeEvent.data;
+    console.log('WebView message:', message);
+    // Handle any messages from the WebView if needed
+  };
 
   const validateForm = () => {
     const newErrors = {}
@@ -93,43 +244,81 @@ export default function PrayerRequest() {
     if (errors[fieldName]) {
       return <Text style={styles.errorText}>{errors[fieldName]}</Text>
     }
-    return null
+    return null;
   }
 
   return (
     <SafeAreaView style={styles.container}>
-  
-
       <ScrollView style={styles.content}>
-        <View style={styles.prayerCallBox}>
-          <View style={styles.callHeader}>
-            <View style={styles.liveIndicator}>
-              <View style={styles.liveDot} />
-              <Text style={styles.liveText}>LIVE</Text>
+        <View>
+          {isLoadingPrayerRoom ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#1e67cd" />
+            <Text style={styles.loadingText}>Loading prayer room...</Text>
+          </View>
+        ) : prayerRoom?.is_active ? (
+          <View style={styles.prayerCallBox}>
+            <View style={styles.callHeader}>
+              <View style={styles.liveIndicator}>
+                <View style={styles.liveDot} />
+                <Text style={styles.liveText}>LIVE</Text>
+              </View>
             </View>
-            {/* <TouchableOpacity style={styles.joinCallButton}>
-              <Ionicons name="headset" size={20} color="#FFF" />
-              <Text style={styles.joinCallText}>Join Prayer</Text>
-            </TouchableOpacity> */}
-          </View>
 
-          <View style={styles.callContent}>
-            <Ionicons name="radio" size={24} color="#1e67cd" />
-            <Text style={styles.callTitle}>Ongoing Prayer Room</Text>
-            <Text style={styles.prayerTopic}>Current Topic: "Healing and Restoration"</Text>
-            <Text style={styles.participantCount}>12 people praying together</Text>
-          </View>
+            <View style={styles.callContent}>
+              <Ionicons name="radio" size={24} color="#1e67cd" />
+              <Text style={styles.callTitle}>{prayerRoom.title || 'Prayer Room'}</Text>
+              {prayerRoom.current_topic && (
+                <Text style={styles.prayerTopic}>Current Topic: "{prayerRoom.current_topic}"</Text>
+              )}
+              {prayerRoom.description && (
+                <Text style={styles.prayerDescription}>{prayerRoom.description}</Text>
+              )}
+            </View>
 
-          <View style={styles.audioWave}>
-            <View style={[styles.waveBar, { height: 8 }]} />
-            <View style={[styles.waveBar, { height: 16 }]} />
-            <View style={[styles.waveBar, { height: 12 }]} />
-            <View style={[styles.waveBar, { height: 20 }]} />
-            <View style={[styles.waveBar, { height: 6 }]} />
-            <View style={[styles.waveBar, { height: 14 }]} />
-            <View style={[styles.waveBar, { height: 18 }]} />
-            <View style={[styles.waveBar, { height: 10 }]} />
+            {/* Hidden WebView for audio playback */}
+            <View style={{ width: 0, height: 0, overflow: 'hidden' }}>
+              <WebView
+                ref={webViewRef}
+                source={{ 
+                  html: getAudioOnlyHtml(extractYouTubeId(prayerRoom.youtube_url) || ''), 
+                  baseUrl: 'https://www.youtube.com' 
+                }}
+                javaScriptEnabled={true}
+                domStorageEnabled={true}
+                allowsFullscreenVideo={false}
+                allowsInlineMediaPlayback={true}
+                mediaPlaybackRequiresUserAction={false}
+                onMessage={handleWebViewMessage}
+                scrollEnabled={false}
+                style={{ opacity: 0 }}
+              />
+            </View>
+
+            {/* Visual audio wave animation */}
+            <View style={styles.audioWave}>
+              {[8, 16, 12, 20, 6, 14, 18, 10].map((height, index) => (
+                <View 
+                  key={index} 
+                  style={[
+                    styles.waveBar, 
+                    { 
+                      height, 
+                      animationDelay: `${index * 0.1}s`,
+                      backgroundColor: prayerRoom ? '#1e67cd' : '#ccc'
+                    }
+                  ]} 
+                />
+              ))}
+            </View>
           </View>
+        ) : (
+          <View style={styles.inactivePrayerRoom}>
+            <Ionicons name="radio" size={40} color="#999" />
+            <Text style={styles.inactiveText}>No active prayer session at the moment</Text>
+            <Text style={styles.inactiveSubtext}>Please check back later for the next prayer session</Text>
+          </View>
+        )}
         </View>
 
         <View style={styles.introSection}>
@@ -141,9 +330,9 @@ export default function PrayerRequest() {
         </View>
 
         <View style={styles.formContainer}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>
-              Name <Text style={styles.required}>*</Text>
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>
+            Name <Text style={styles.required}>*</Text>
             </Text>
             <TextInput
               style={[styles.input, errors.name && styles.inputError]}
@@ -264,7 +453,7 @@ export default function PrayerRequest() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F5F5F5",
+    backgroundColor: "#FFFFFF",
   },
   header: {
     backgroundColor: "#1e67cd",
@@ -396,17 +585,54 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   prayerCallBox: {
-    backgroundColor: "#FFF",
-    margin: 15,
-    borderRadius: 16,
-    padding: 20,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 16,
+    margin: 16,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: "#1e67cd",
+    shadowRadius: 4,
+    elevation: 3,
+    overflow: 'hidden',
+  },
+  inactivePrayerRoom: {
+    backgroundColor: "#F9F9F9",
+    borderRadius: 12,
+    padding: 24,
+    margin: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#EEE',
+    borderStyle: 'dashed',
+  },
+  inactiveText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 12,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  inactiveSubtext: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  prayerDescription: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 20,
+  },
+  prayerTopic: {
+    fontSize: 15,
+    color: "#1e67cd",
+    marginTop: 4,
+    textAlign: "center",
+    fontWeight: '500',
   },
   callHeader: {
     flexDirection: "row",
@@ -414,66 +640,36 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 15,
   },
-  liveIndicator: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FF3B30",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#FFF",
-    marginRight: 6,
-  },
-  liveText: {
-    color: "#FFF",
-    fontSize: 12,
-    fontWeight: "bold",
-  },
-  joinCallButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1e67cd",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  joinCallText: {
-    color: "#FFF",
-    fontSize: 14,
-    fontWeight: "600",
-    marginLeft: 6,
-  },
-  callContent: {
-    alignItems: "center",
-    marginBottom: 15,
-  },
   callTitle: {
     fontSize: 18,
     fontWeight: "bold",
-    color: "#1e67cd",
+    color: "#333333",
     marginTop: 8,
-    marginBottom: 4,
-  },
-  prayerTopic: {
-    fontSize: 16,
-    color: "#333",
-    marginBottom: 4,
     textAlign: "center",
+    marginBottom: 4,
   },
   participantCount: {
-    fontSize: 14,
-    color: "#666",
+    fontSize: 12,
+    color: "#999999",
+    marginTop: 4,
+    textAlign: "center",
+  },
+  '@keyframes wave': {
+    '0%, 100%': {
+      transform: [{ scaleY: 0.5 }],
+    },
+    '50%': {
+      transform: [{ scaleY: 1.5 }],
+    },
   },
   audioWave: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "center",
-    alignItems: "flex-end",
-    height: 24,
+    height: 40,
+    marginTop: 16,
+    gap: 4,
+    opacity: 0.8,
   },
   waveBar: {
     width: 3,
