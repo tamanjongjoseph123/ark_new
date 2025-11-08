@@ -82,7 +82,7 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="sons"
+          name="sons-new"
           options={{
             headerShown: false,
             title: 'Sons of John Chi',

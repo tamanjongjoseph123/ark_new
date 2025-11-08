@@ -1,0 +1,191 @@
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+
+const SonsScreen = () => {
+  const router = useRouter();
+
+  return (
+    <View style={styles.container}>
+      {/* Header */}
+      <LinearGradient colors={['#1e67cd', '#1e67cd']} style={styles.header}>
+        <View style={styles.headerContent}>
+          <Ionicons name="people" size={32} color="#FFF" />
+          <Text style={styles.headerTitle}>Sons of John Chi</Text>
+          <Text style={styles.headerSubtitle}>Brotherhood in Christ</Text>
+        </View>
+      </LinearGradient>
+
+      <ScrollView style={styles.content}>
+        <View style={styles.welcomeSection}>
+          <LinearGradient colors={['#2E4057', '#385780']} style={styles.welcomeGradient}>
+            <Ionicons name="heart" size={60} color="#FFF" />
+            <Text style={styles.welcomeTitle}>Become A Son of John Chi</Text>
+            <Text style={styles.welcomeText}>
+              Join our community dedicated to spiritual growth, fellowship, and serving God's purpose. 
+              Apply now to become part of this transformative brotherhood.
+            </Text>
+            
+            <TouchableOpacity 
+              style={styles.applyButton}
+              onPress={() => router.push('/sons-application')}
+            >
+              <LinearGradient 
+                colors={['#1e67cd', '#1a5ab5']} 
+                style={styles.applyButtonGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Ionicons name="person-add" size={24} color="#FFF" style={styles.applyIcon} />
+                <Text style={styles.applyButtonText}>Apply Now</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </LinearGradient>
+        </View>
+
+        <View style={styles.infoSection}>
+          <Text style={styles.sectionTitle}>About Sons of John Chi</Text>
+          <View style={styles.infoCard}>
+            <View style={styles.infoItem}>
+              <Ionicons name="people-circle" size={28} color="#1e67cd" />
+              <Text style={styles.infoText}>Brotherhood & Fellowship</Text>
+            </View>
+            <View style={styles.infoItem}>
+              <Ionicons name="book" size={28} color="#1e67cd" />
+              <Text style={styles.infoText}>Spiritual Growth</Text>
+            </View>
+            <View style={[styles.infoItem, styles.infoItemLast]}>
+              <Ionicons name="hand-left" size={28} color="#1e67cd" />
+              <Text style={styles.infoText}>Service & Ministry</Text>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F8F8F8',
+  },
+  header: {
+    paddingTop: 50,
+    paddingBottom: 20,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  headerContent: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  headerTitle: {
+    color: '#FFF',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginTop: 10,
+  },
+  headerSubtitle: {
+    color: '#FFF',
+    fontSize: 16,
+    opacity: 0.9,
+    marginTop: 5,
+  },
+  content: {
+    flex: 1,
+    padding: 20,
+  },
+  welcomeSection: {
+    marginBottom: 25,
+    borderRadius: 15,
+    overflow: 'hidden',
+  },
+  welcomeGradient: {
+    padding: 25,
+    alignItems: 'center',
+    borderRadius: 15,
+  },
+  welcomeTitle: {
+    color: '#FFF',
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginTop: 15,
+    textAlign: 'center',
+  },
+  welcomeText: {
+    color: '#FFF',
+    textAlign: 'center',
+    marginTop: 10,
+    marginBottom: 25,
+    lineHeight: 22,
+    opacity: 0.9,
+  },
+  applyButton: {
+    width: '80%',
+    borderRadius: 25,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  applyButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  applyIcon: {
+    marginRight: 10,
+  },
+  applyButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  infoSection: {
+    marginBottom: 25,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    color: '#333',
+  },
+  infoCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 15,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  infoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  infoItemLast: {
+    borderBottomWidth: 0,
+  },
+  infoText: {
+    marginLeft: 15,
+    fontSize: 16,
+    color: '#333',
+  },
+});
+
+export default SonsScreen;

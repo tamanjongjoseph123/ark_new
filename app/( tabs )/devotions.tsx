@@ -97,7 +97,7 @@ export default function DevotionsScreen() {
 
     // Navigate to video details screen with params (same as kingdom-leadership)
     router.push({
-      pathname: "/video-details-two",
+      pathname: "/video-details",
       params: {
         videoId: videoId,
         title: "Devotional Video",

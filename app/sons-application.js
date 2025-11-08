@@ -1,5 +1,3 @@
-"use client"
-
 import { useState } from "react"
 import {
   View,
@@ -17,8 +15,8 @@ import {
 import { LinearGradient } from "expo-linear-gradient"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
-import { BASE_URL } from "../base_url"
-import { login as apiLogin } from "../services/api"
+import { BASE_URL } from "./base_url"
+import { login as apiLogin } from "./services/api"
 
 export default function SonsApplication() {
   const router = useRouter()
@@ -139,17 +137,20 @@ export default function SonsApplication() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <LinearGradient colors={["#1e67cd", "#1e67cd"]} style={styles.header}>
-        <View style={styles.headerContent}>
-          <Ionicons name="people" size={32} color="#FFF" />
-          <Text style={styles.headerTitle}>Sons of John Chi</Text>
-          <Text style={styles.headerSubtitle}>Application Form</Text>
-        </View>
-      </LinearGradient>
 
-      <KeyboardAvoidingView style={styles.keyboardView} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.keyboardView}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
+      >
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          keyboardDismissMode="interactive"
+        >
           {/* Welcome Section */}
           <View style={styles.welcomeSection}>
             <LinearGradient colors={["#2E4057", "#385780"]} style={styles.welcomeGradient}>
@@ -235,85 +236,98 @@ export default function SonsApplication() {
               />
             </View>
 
-            <Text style={styles.sectionTitle}>Spiritual Journey</Text>
-
+            <Text style={styles.sectionTitle}>Your Story</Text>
+            
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Your Testimony *</Text>
+              <Text style={styles.inputLabel}>Your Testimony</Text>
               <TextInput
                 style={[styles.textInput, styles.textArea]}
-                placeholder="Share your testimony and relationship with Christ"
+                placeholder="Share your testimony or why you want to join (optional)"
                 value={formData.testimony}
-                onChangeText={(value) => handleInputChange("testimony", value)}
+                onChangeText={(value) => {
+                  handleInputChange("testimony", value)
+                  // Auto-fill whyJoin and commitment if they're empty
+                  if (!formData.whyJoin) handleInputChange("whyJoin", value)
+                  if (!formData.commitment) handleInputChange("commitment", value)
+                }}
                 multiline
                 numberOfLines={4}
-                textAlignVertical="top"
                 placeholderTextColor="#999"
               />
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Why do you want to join? *</Text>
+              <Text style={styles.inputLabel}>
+                Why do you want to join Sons of John Chi? *
+                {!formData.whyJoin && !formData.testimony && (
+                  <Text style={{color: 'red'}}> (Required)</Text>
+                )}
+              </Text>
               <TextInput
                 style={[styles.textInput, styles.textArea]}
-                placeholder="Explain why you want to become a Son of John Chi"
+                placeholder="Share your reasons for joining"
                 value={formData.whyJoin}
                 onChangeText={(value) => handleInputChange("whyJoin", value)}
                 multiline
                 numberOfLines={4}
-                textAlignVertical="top"
                 placeholderTextColor="#999"
               />
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Your Commitment</Text>
+              <Text style={styles.inputLabel}>
+                What are your spiritual goals? *
+                {!formData.commitment && !formData.testimony && (
+                  <Text style={{color: 'red'}}> (Required)</Text>
+                )}
+              </Text>
               <TextInput
                 style={[styles.textInput, styles.textArea]}
-                placeholder="Describe your commitment"
+                placeholder="Share your spiritual goals and commitments"
                 value={formData.commitment}
                 onChangeText={(value) => handleInputChange("commitment", value)}
                 multiline
-                numberOfLines={3}
-                textAlignVertical="top"
+                numberOfLines={4}
                 placeholderTextColor="#999"
               />
             </View>
 
-            {/* Account Credentials */}
-            <Text style={styles.sectionTitle}>Account</Text>
+            <Text style={styles.sectionTitle}>Account Information</Text>
+            
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Desired Username *</Text>
+              <Text style={styles.inputLabel}>Create Username *</Text>
               <TextInput
                 style={styles.textInput}
                 placeholder="Choose a username"
-                autoCapitalize="none"
                 value={username}
                 onChangeText={setUsername}
-                placeholderTextColor="#999"
-              />
-            </View>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Password *</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Enter a password"
-                secureTextEntry
-                value={password}
-                onChangeText={setPassword}
+                autoCapitalize="none"
                 placeholderTextColor="#999"
               />
             </View>
 
-            {/* Submit Button */}
-            <TouchableOpacity style={[styles.submitButton, loading && { opacity: 0.7 }]} onPress={handleSubmit} disabled={loading}>
-              <LinearGradient colors={loading ? ["#9bbcf0", "#9bbcf0"] : ["#1e67cd", "#1e67cd"]} style={styles.submitGradient}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Create Password *</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Create a strong password"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                placeholderTextColor="#999"
+              />
+            </View>
+
+            <TouchableOpacity 
+              style={styles.submitButton}
+              onPress={handleSubmit}
+              disabled={loading}
+            >
+              <LinearGradient colors={["#1e67cd", "#1e67cd"]} style={styles.submitGradient}>
                 {loading ? (
-                  <Text style={styles.submitText}>Submitting...</Text>
+                  <ActivityIndicator color="#FFF" />
                 ) : (
-                  <>
-                    <Ionicons name="send" size={20} color="#FFF" style={styles.submitIcon} />
-                    <Text style={styles.submitText}>Submit Application</Text>
-                  </>
+                  <Text style={styles.submitButtonText}>Submit Application</Text>
                 )}
               </LinearGradient>
             </TouchableOpacity>
@@ -391,7 +405,7 @@ export default function SonsApplication() {
                           // Handle successful login
                           setLoginVisible(false)
 
-                          // Show success message and redirect to sons dashboard
+                          // Show success message and redirect to courses
                           Alert.alert(
                             "Login Successful!", 
                             "You have successfully logged in to your Sons of John Chi account.",
@@ -415,7 +429,6 @@ export default function SonsApplication() {
                           // Handle different error formats
                           if (error.response) {
                             const { data, status } = error.response
-
                             if (status === 401) {
                               errorMessage = "Invalid username or password. Please try again."
                             } else if (data.detail) {
@@ -462,58 +475,61 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F8F8F8",
   },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
   header: {
     paddingTop: 50,
-    paddingBottom: 30,
+    paddingBottom: 20,
     paddingHorizontal: 20,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 5,
+    elevation: 3,
   },
   headerContent: {
     alignItems: "center",
+    marginTop: 20,
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: "800",
+    fontSize: 24,
+    fontWeight: "700",
     color: "#FFF",
     marginTop: 10,
-    letterSpacing: 0.5,
   },
   headerSubtitle: {
     fontSize: 16,
-    color: "#FFF",
+    color: "rgba(255,255,255,0.8)",
     marginTop: 5,
-    opacity: 0.9,
+  },
+  keyboardView: {
+    flex: 1,
+    width: '100%',
+  },
+  scrollView: {
+    flex: 1,
+    width: '100%',
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 100, // Extra padding at the bottom of the content
   },
   welcomeSection: {
-    margin: 20,
-    borderRadius: 15,
-    overflow: "hidden",
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    marginBottom: 10,
+    paddingHorizontal: 20,
   },
   welcomeGradient: {
-    padding: 25,
+    padding: 20,
+    borderRadius: 15,
     alignItems: "center",
   },
   welcomeTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: "700",
     color: "#FFF",
     marginTop: 15,
     marginBottom: 10,
+    textAlign: "center",
   },
   welcomeText: {
     fontSize: 16,
@@ -525,6 +541,7 @@ const styles = StyleSheet.create({
   formContainer: {
     padding: 20,
     paddingTop: 10,
+    paddingBottom: 60, // Extra padding to account for tab bar
   },
   sectionTitle: {
     fontSize: 20,
@@ -544,103 +561,67 @@ const styles = StyleSheet.create({
   },
   textInput: {
     backgroundColor: "#FFF",
-    borderRadius: 12,
+    borderRadius: 10,
     padding: 15,
     fontSize: 16,
+    color: "#333",
     borderWidth: 1,
     borderColor: "#E0E0E0",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
   textArea: {
-    height: 100,
-    paddingTop: 15,
+    minHeight: 100,
+    textAlignVertical: 'top',
   },
   submitButton: {
-    marginTop: 30,
-    marginBottom: 20,
-    borderRadius: 25,
-    overflow: "hidden",
-    elevation: 5,
+    marginTop: 10,
+    borderRadius: 10,
+    overflow: 'hidden',
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   submitGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 18,
-    paddingHorizontal: 30,
+    padding: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  submitIcon: {
-    marginRight: 10,
-  },
-  submitText: {
-    color: "#FFF",
-    fontSize: 18,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-  },
-  footerNote: {
-    fontSize: 14,
-    color: "#666",
-    textAlign: "center",
-    fontStyle: "italic",
-    marginBottom: 30,
-  },
-  nextButton: {
-    marginTop: 15,
-    marginBottom: 20,
-    borderRadius: 25,
-    overflow: "hidden",
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 3.84,
-  },
-  nextGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 30,
-  },
-  nextText: {
+  submitButtonText: {
     color: "#FFF",
     fontSize: 16,
-    fontWeight: "600",
-    letterSpacing: 0.5,
+    fontWeight: "700",
   },
-  nextIcon: {
-    marginLeft: 10,
-  },
-  // Login button styles
   loginButton: {
     marginTop: 15,
-    marginBottom: 20,
-    borderRadius: 25,
+    borderRadius: 10,
     overflow: 'hidden',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   loginGradient: {
-    paddingVertical: 16,
-    paddingHorizontal: 30,
+    padding: 15,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   loginButtonText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '600',
+    color: "#FFF",
+    fontSize: 14,
+    fontWeight: "600",
   },
-  // Modal styles
+  footerNote: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 20,
+    textAlign: "center",
+    fontStyle: "italic",
+  },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
@@ -649,23 +630,25 @@ const styles = StyleSheet.create({
     width: '100%',
     backgroundColor: 'white',
     borderRadius: 15,
-    padding: 20,
+    padding: 25,
     maxWidth: 400,
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    color: '#2E4057',
     marginBottom: 20,
     textAlign: 'center',
-    color: '#1e67cd',
   },
   modalInput: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 15,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 10,
+    padding: 15,
     fontSize: 16,
+    color: '#333',
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
   },
   modalActions: {
     flexDirection: 'row',
@@ -674,14 +657,14 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     flex: 1,
-    padding: 12,
-    borderRadius: 8,
+    padding: 15,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: 5,
   },
   modalCancel: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#F0F0F0',
+    marginRight: 10,
   },
   modalPrimary: {
     backgroundColor: '#1e67cd',
@@ -689,6 +672,7 @@ const styles = StyleSheet.create({
   modalButtonText: {
     color: 'white',
     fontWeight: '600',
+    fontSize: 16,
   },
   loginButtonContent: {
     flexDirection: 'row',
