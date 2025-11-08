@@ -11,11 +11,14 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Modal,
+  ActivityIndicator,
 } from "react-native"
 import { LinearGradient } from "expo-linear-gradient"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { BASE_URL } from "../base_url"
+import { login as apiLogin } from "../services/api"
 
 export default function SonsApplication() {
   const router = useRouter()
@@ -33,6 +36,10 @@ export default function SonsApplication() {
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
+  const [loginLoading, setLoginLoading] = useState(false)
+  const [loginVisible, setLoginVisible] = useState(false)
+  const [loginUsername, setLoginUsername] = useState("")
+  const [loginPassword, setLoginPassword] = useState("")
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({
@@ -58,27 +65,59 @@ export default function SonsApplication() {
 
     setLoading(true)
     try {
-      const payload = {
-        application_type: "sons_of_john_chi",
-        full_name: formData.fullName,
-        email: formData.email,
-        phone_number: formData.phone,
-        your_interest: formData.whyJoin || formData.testimony,
-        your_goals: formData.commitment || formData.testimony,
-        username,
-        password,
-      }
-      const res = await fetch(`${BASE_URL}/api/applications/`, {
+      const response = await fetch(`${BASE_URL}/api/applications/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      if (!res.ok) {
-        let msg = 'Failed to submit application'
-        try { const err = await res.json(); msg = typeof err === 'string' ? err : JSON.stringify(err) } catch {}
-        throw new Error(msg)
+        body: JSON.stringify({
+          application_type: 'sons_of_john_chi',
+          full_name: formData.fullName,
+          email: formData.email,
+          phone_number: formData.phone,
+          your_interest: formData.whyJoin || formData.testimony,
+          your_goals: formData.commitment || formData.testimony,
+          username,
+          password,
+        })
+      });
+
+      const responseData = await response.json()
+      
+      if (!response.ok) {
+        let errorMessage = "Failed to submit application"
+        if (responseData) {
+          if (typeof responseData === 'string') {
+            errorMessage = responseData
+          } else if (responseData.username) {
+            errorMessage = `Username: ${responseData.username.join(', ')}`
+          } else if (responseData.email) {
+            errorMessage = `Email: ${responseData.email.join(', ')}`
+          } else if (responseData.detail) {
+            errorMessage = responseData.detail
+          } else {
+            errorMessage = JSON.stringify(responseData)
+          }
+        }
+        throw new Error(errorMessage)
       }
-      Alert.alert('Success', 'Application submitted! You can now log in while pending review.')
+
+      // Show success message and open login modal with pre-filled credentials
+      Alert.alert(
+        "Application Submitted!", 
+        "Your application has been received. You can log in while your application is being reviewed.",
+        [
+          {
+            text: "Log In Now",
+            onPress: () => {
+              setLoginUsername(username)
+              setLoginPassword(password)
+              setLoginVisible(true)
+            }
+          },
+          { text: "OK" }
+        ]
+      )
+      
+      // Clear form but keep username for login
       setFormData({
         fullName: "",
         email: "",
@@ -90,10 +129,9 @@ export default function SonsApplication() {
         whyJoin: "",
         commitment: "",
       })
-      setUsername("")
       setPassword("")
     } catch (e) {
-      Alert.alert('Error', e.message)
+      Alert.alert('Error', e.message || 'Failed to submit application')
     } finally {
       setLoading(false)
     }
@@ -280,16 +318,138 @@ export default function SonsApplication() {
               </LinearGradient>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={()=> router.push("/payment")}  style={styles.nextButton}>
-              <LinearGradient colors={["#2E4057", "#385780"]} style={styles.nextGradient}>
-                <Text style={styles.nextText}>Next</Text>
-                <Ionicons name="arrow-forward" size={20} color="#FFF" style={styles.nextIcon} />
+            <TouchableOpacity 
+              style={styles.loginButton}
+              onPress={() => {
+                setLoginUsername(username || "")
+                setLoginPassword(password || "")
+                setLoginVisible(true)
+              }}
+            >
+              <LinearGradient colors={["#2E4057", "#385780"]} style={styles.loginGradient}>
+                <Text style={styles.loginButtonText}>Already have an account? Login</Text>
               </LinearGradient>
             </TouchableOpacity>
 
             <Text style={styles.footerNote}>
               * Required fields. Your application will be reviewed by our leadership team.
             </Text>
+
+            {/* Login Modal */}
+            <Modal 
+              visible={loginVisible} 
+              transparent 
+              animationType="slide"
+              onRequestClose={() => setLoginVisible(false)}
+            >
+              <View style={styles.modalBackdrop}>
+                <View style={styles.modalCard}>
+                  <Text style={styles.modalTitle}>Login to Sons of John Chi</Text>
+                  
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="Username"
+                    autoCapitalize="none"
+                    value={loginUsername}
+                    onChangeText={setLoginUsername}
+                  />
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="Password"
+                    secureTextEntry
+                    value={loginPassword}
+                    onChangeText={setLoginPassword}
+                  />
+
+                  <View style={styles.modalActions}>
+                    <TouchableOpacity 
+                      style={[styles.modalButton, styles.modalCancel]}
+                      onPress={() => {
+                        if (loginLoading) return
+                        setLoginVisible(false)
+                      }}
+                    >
+                      <Text style={[styles.modalButtonText, {color: '#333'}]}>Cancel</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity 
+                      style={[styles.modalButton, styles.modalPrimary]}
+                      disabled={loginLoading}
+                      onPress={async () => {
+                        if (!loginUsername || !loginPassword) {
+                          Alert.alert("Error", "Please enter both username and password")
+                          return
+                        }
+
+                        try {
+                          setLoginLoading(true)
+                          const res = await apiLogin({
+                            username: loginUsername.trim(),
+                            password: loginPassword,
+                          })
+
+                          // Handle successful login
+                          setLoginVisible(false)
+
+                          // Show success message and redirect to sons dashboard
+                          Alert.alert(
+                            "Login Successful!", 
+                            "You have successfully logged in to your Sons of John Chi account.",
+                            [
+                              {
+                                text: "Continue",
+                                onPress: () => {
+                                  router.push('/courses')
+                                },
+                              },
+                            ]
+                          )
+
+                          // Clear login form
+                          setLoginUsername("")
+                          setLoginPassword("")
+                        } catch (error) {
+                          console.error("Login error:", error)
+                          let errorMessage = "Login failed. Please try again."
+
+                          // Handle different error formats
+                          if (error.response) {
+                            const { data, status } = error.response
+
+                            if (status === 401) {
+                              errorMessage = "Invalid username or password. Please try again."
+                            } else if (data.detail) {
+                              errorMessage = data.detail
+                            } else if (data.error) {
+                              errorMessage = data.error
+                            } else if (typeof data === 'string') {
+                              errorMessage = data
+                            } else if (typeof data === 'object') {
+                              errorMessage = Object.values(data).flat().join('\n')
+                            }
+                          } else if (error.message) {
+                            errorMessage = error.message
+                          }
+
+                          Alert.alert("Login Failed", errorMessage)
+                        } finally {
+                          setLoginLoading(false)
+                        }
+                      }}
+                    >
+                      {loginLoading ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <View style={styles.loginButtonContent}>
+                          <Ionicons name="log-in" size={18} color="white" style={styles.loginIcon} />
+                          <Text style={styles.modalButtonText}>Login</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </Modal>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -459,5 +619,83 @@ const styles = StyleSheet.create({
   },
   nextIcon: {
     marginLeft: 10,
+  },
+  // Login button styles
+  loginButton: {
+    marginTop: 15,
+    marginBottom: 20,
+    borderRadius: 25,
+    overflow: 'hidden',
+  },
+  loginGradient: {
+    paddingVertical: 16,
+    paddingHorizontal: 30,
+    alignItems: 'center',
+  },
+  loginButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // Modal styles
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    backgroundColor: 'white',
+    borderRadius: 15,
+    padding: 20,
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+    color: '#1e67cd',
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 15,
+    fontSize: 16,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  modalButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 5,
+  },
+  modalCancel: {
+    backgroundColor: '#f0f0f0',
+  },
+  modalPrimary: {
+    backgroundColor: '#1e67cd',
+  },
+  modalButtonText: {
+    color: 'white',
+    fontWeight: '600',
+  },
+  loginButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loginIcon: {
+    marginRight: 8,
   },
 })
