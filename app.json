@@ -24,7 +24,9 @@
         },
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "This app uses the camera to allow you to record videos for testimonies.",
-        "NSPhotoLibraryUsageDescription": "This app needs access to your photos to let you select videos for testimonies."
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photos to let you select videos for testimonies.",
+        "NSUserNotificationsUsageDescription": "This app uses notifications to keep you updated with new devotions and important updates.",
+        "UIBackgroundModes": ["remote-notification"]
       }
     },
     "android": {
@@ -36,8 +38,11 @@
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
-      ]
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.VIBRATE"
+      ],
+      "useNextNotificationsApi": true
     },
     "web": {
       "bundler": "metro",
@@ -60,7 +65,16 @@
           "androidExoPlayerVersion": "2.19.1"
         }
       ],
-      "expo-video"
+      "expo-video",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#ffffff",
+          "sounds": [],
+          "mode": "production"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

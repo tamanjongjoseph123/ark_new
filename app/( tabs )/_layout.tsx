@@ -3,8 +3,9 @@ import { Tabs } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import SplashScreenSequence from '../components/SplashScreenSequence';
-import { View } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
+import { useNewDevotion } from '../context/NewDevotionContext';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -59,10 +60,30 @@ export default function TabLayout() {
     );
   }
 
+  const { hasNewDevotion } = useNewDevotion();
+  
+  const styles = StyleSheet.create({
+    iconContainer: {
+      position: 'relative',
+    },
+    badge: {
+      position: 'absolute',
+      top: -2,
+      right: -6,
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: 'red',
+      borderWidth: 1,
+      borderColor: '#fff',
+    },
+  });
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <Tabs
         screenOptions={{
+          headerShown: false, // This will hide the header for all tabs
           tabBarActiveTintColor: '#FFD700',
           tabBarInactiveTintColor: '#FFD700',
           tabBarStyle: {
@@ -107,7 +128,10 @@ export default function TabLayout() {
             headerShown: false,
             title: 'Devotions',
             tabBarIcon: ({ color, focused }) => (
-              <Ionicons name={focused ? 'book' : 'book-outline'} color={color} size={30} />
+              <View style={styles.iconContainer}>
+                <Ionicons name={focused ? 'book' : 'book-outline'} color={color} size={25} />
+                {hasNewDevotion && <View style={styles.badge} />}
+              </View>
             ),
           }}
         />

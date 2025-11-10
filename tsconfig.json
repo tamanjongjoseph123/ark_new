@@ -1,10 +1,27 @@
 {
-  "compilerOptions": {},
+  "compilerOptions": {
+    "allowJs": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "jsx": "react-native",
+    "lib": ["dom", "esnext"],
+    "moduleResolution": "node",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./app/*"]
+    }
+  },
   "extends": "expo/tsconfig.base",
   "include": [
     "**/*.ts",
     "**/*.tsx",
     ".expo/types/**/*.ts",
-    "expo-env.d.ts"
-, "app/payment.js"  ]
+    "expo-env.d.ts",
+    "app/**/*.d.ts"
+  ],
+  "exclude": ["node_modules"]
 }

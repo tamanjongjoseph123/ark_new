@@ -1,10 +1,14 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import React, { useEffect, useState, useRef, useCallback } from "react"
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Image } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import { useRouter } from "expo-router"
+import { useRouter, useFocusEffect } from "expo-router"
 import { listDevotions, getTodayDevotion } from "../services/api"
+import { registerForPushNotifications, registerDeviceToken } from "../utils/notifications"
+import * as Notifications from 'expo-notifications';
+import { Subscription } from 'expo-modules-core';
+import { useNewDevotion } from "../context/NewDevotionContext";
 
 type ApiDevotion = {
   id: number
@@ -25,6 +29,9 @@ export default function DevotionsScreen() {
   const [devotions, setDevotions] = useState<ApiDevotion[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const notificationListener = useRef<Subscription>();
+  const responseListener = useRef<Subscription>();
+  const { setHasNewDevotion } = useNewDevotion();
 
   const youTubeId = (url: string = "") => {
     try {
@@ -74,9 +81,79 @@ export default function DevotionsScreen() {
     }
   }
 
+  // Set up notification listeners and badge state
   useEffect(() => {
-    loadDevotions()
-  }, [])
+    loadDevotions();
+    
+    const registerAndSubscribe = async () => {
+      try {
+        console.log('Requesting push notification permissions...');
+        const token = await registerForPushNotifications();
+        
+        if (token) {
+          console.log('Received push token, registering with server...');
+          try {
+            await registerDeviceToken(token);
+            console.log('Successfully registered device token with server');
+          } catch (regError) {
+            console.error('Failed to register device token:', regError);
+          }
+        } else {
+          console.log('No push token received. User may have denied permissions.');
+        }
+        
+        // Listen for incoming notifications
+        notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+          const { data } = notification.request.content;
+          console.log('Notification received:', data);
+          
+          if (data?.type === 'new_devotion') {
+            console.log('New devotion notification received, refreshing devotions...');
+            setHasNewDevotion(true);
+            loadDevotions();
+          }
+        });
+        
+        // Listen for notification taps
+        responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+          const { data } = response.notification.request.content;
+          console.log('User tapped notification:', data);
+          
+          if (data?.type === 'new_devotion') {
+            console.log('User tapped new devotion notification, refreshing devotions...');
+            setHasNewDevotion(false);
+            loadDevotions();
+          }
+        });
+        
+      } catch (error) {
+        console.error('Error in notification setup:', error);
+      }
+    };
+    
+    registerAndSubscribe();
+    
+    return () => {
+      console.log('Cleaning up notification listeners...');
+      if (notificationListener.current) {
+        Notifications.removeNotificationSubscription(notificationListener.current);
+      }
+      if (responseListener.current) {
+        Notifications.removeNotificationSubscription(responseListener.current);
+      }
+    };
+  }, []);
+  
+  // Clear the badge when the devotions tab is focused
+  useFocusEffect(
+    useCallback(() => {
+      setHasNewDevotion(false);
+      
+      return () => {
+        // Optional cleanup
+      };
+    }, [setHasNewDevotion])
+  );
 
   const toggleExpanded = (id: number) => {
     const newExpanded = new Set(expandedCards)
