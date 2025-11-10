@@ -34,14 +34,26 @@ export default function PrayerRequest() {
   const [isLoadingPrayerRoom, setIsLoadingPrayerRoom] = useState(true)
   const webViewRef = useRef(null)
 
-  // Fetch prayer room status
+  // Fetch prayer room status with enhanced logging
   const fetchPrayerRoom = async () => {
+    console.log('🔍 Fetching prayer room status...');
     try {
       const response = await fetch(`${BASE_URL}/api/prayer-room/`);
+      console.log('📡 Prayer room response status:', response.status);
       const data = await response.json();
+      console.log('📋 Prayer room data:', data);
       setPrayerRoom(data);
+      
+      // Log video URL and extracted ID
+      if (data?.youtube_url) {
+        const videoId = extractYouTubeId(data.youtube_url);
+        console.log('🎥 YouTube URL:', data.youtube_url);
+        console.log('🆔 Extracted Video ID:', videoId);
+      } else {
+        console.warn('⚠️ No YouTube URL found in prayer room data');
+      }
     } catch (error) {
-      console.error('Error fetching prayer room:', error);
+      console.error('❌ Error fetching prayer room:', error);
     } finally {
       setIsLoadingPrayerRoom(false);
     }
@@ -49,133 +61,145 @@ export default function PrayerRequest() {
 
   // Initial fetch and set up polling
   useEffect(() => {
+    console.log('🚀 Initializing prayer room component');
     fetchPrayerRoom();
-    const interval = setInterval(fetchPrayerRoom, 30000); // Poll every 30 seconds
-    return () => clearInterval(interval);
+    
+    const interval = setInterval(() => {
+      console.log('🔄 Polling for prayer room updates...');
+      fetchPrayerRoom();
+    }, 30000); // Poll every 30 seconds
+    
+    return () => {
+      console.log('🧹 Cleaning up prayer room component');
+      clearInterval(interval);
+    };
   }, []);
 
-  // Extract YouTube video ID from URL
+  // Extract YouTube video ID from URL - matches livestreaming.tsx implementation
   const extractYouTubeId = (url) => {
     if (!url) return null;
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
     const match = url.match(regExp);
-    return (match && match[2].length === 11) ? match[2] : null;
+    return (match && match[7]?.length === 11) ? match[7] : null;
   };
 
-  // HTML template for audio-only YouTube player
-  const getAudioOnlyHtml = (videoId) => `
+  // HTML template for YouTube player - matches livestreaming.tsx implementation
+  const getPlayerHtml = (videoId) => {
+    console.log('🛠️ Generating player HTML for video ID:', videoId);
+    if (!videoId) {
+      console.error('❌ No video ID provided for player');
+      return '';
+    }
+    
+    return `
     <!DOCTYPE html>
     <html>
-    <head>
-      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-      <style>
-        body, html { 
-          margin: 0; 
-          padding: 0; 
-          background-color: transparent;
-          overflow: hidden;
-          height: 100%;
-          width: 100%;
-        }
-        #player {
-          position: absolute;
-          width: 1px;
-          height: 1px;
-          opacity: 0;
-          pointer-events: none;
-        }
-        .audio-container {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          height: 100%;
-          padding: 20px;
-        }
-        .audio-wave {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          height: 60px;
-          width: 100%;
-          gap: 4px;
-        }
-        .wave-bar {
-          width: 4px;
-          background-color: #1e67cd;
-          border-radius: 2px;
-          animation: wave 1.5s ease-in-out infinite;
-        }
-        @keyframes wave {
-          0%, 100% { transform: scaleY(0.5); }
-          50% { transform: scaleY(1.5); }
-        }
-      </style>
-    </head>
-    <body>
-      <div id="player"></div>
-      <script>
-        var tag = document.createElement('script');
-        tag.src = "https://www.youtube.com/iframe_api";
-        var firstScriptTag = document.getElementsByTagName('script')[0];
-        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-
-        var player;
-        function onYouTubeIframeAPIReady() {
-          player = new YT.Player('player', {
-            height: '1',
-            width: '1',
-            videoId: '${videoId}',
-            playerVars: {
-              'autoplay': 1,
-              'controls': 0,
-              'disablekb': 1,
-              'fs': 0,
-              'iv_load_policy': 3,
-              'modestbranding': 1,
-              'playsinline': 1,
-              'rel': 0,
-              'showinfo': 0,
-              'enablejsapi': 1
-            },
-            events: {
-              'onReady': onPlayerReady,
-              'onStateChange': onPlayerStateChange
-            }
-          });
-        }
-
-        function onPlayerReady(event) {
-          event.target.playVideo();
-          event.target.mute(); // Start muted to avoid autoplay issues
-          setTimeout(() => {
-            event.target.unMute(); // Unmute after a short delay
-          }, 1000);
-          
-          // Notify React Native that player is ready
-          if (window.ReactNativeWebView) {
-            window.ReactNativeWebView.postMessage('player_ready');
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { 
+            margin: 0; 
+            background-color: black;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
           }
-        }
+          #player {
+            width: 100%;
+            height: 100%;
+          }
+          .error-message {
+            color: white;
+            text-align: center;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+          }
+        </style>
+      </head>
+      <body>
+        <div id="player"></div>
+        <script>
+          var tag = document.createElement('script');
+          tag.src = "https://www.youtube.com/iframe_api";
+          var firstScriptTag = document.getElementsByTagName('script')[0];
+          firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 
-        function onPlayerStateChange(event) {
-          if (event.data === YT.PlayerState.PLAYING) {
-            // Player started playing
-            if (window.ReactNativeWebView) {
-              window.ReactNativeWebView.postMessage('player_playing');
+          var player;
+          var currentHost = 'https://www.youtube-nocookie.com';
+          var triedAlternateHost = false;
+          var usedFallbackEmbed = false;
+
+          function createPlayer() {
+            if (player && player.destroy) {
+              try { player.destroy(); } catch (e) {}
             }
+            var container = document.getElementById('player');
+            container.innerHTML = '';
+            player = new YT.Player('player', {
+              height: '100%',
+              width: '100%',
+              videoId: '${videoId}',
+              host: currentHost,
+              playerVars: {
+                'autoplay': 1,
+                'playsinline': 1,
+                'modestbranding': 1,
+                'rel': 0,
+                'showinfo': 0,
+                'iv_load_policy': 3,
+                'enablejsapi': 1,
+                'origin': window.location.origin
+              },
+              events: {
+                'onReady': onPlayerReady,
+                'onStateChange': onPlayerStateChange,
+                'onError': onPlayerError
+              }
+            });
+          }
+
+          function onPlayerReady(event) {
+            console.log('Player is ready');
+            event.target.playVideo();
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage('player_ready');
+            }
+          }
+
+          function onPlayerStateChange(event) {
+            if (event.data === YT.PlayerState.PLAYING) {
+              console.log('Player started playing');
+              if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage('player_playing');
+              }
+            }
+        function onPlayerStateChange(event) {
+          if (event.data === YT.PlayerState.PLAYING && window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage('player_playing');
           }
         }
       </script>
     </body>
     </html>
   `;
+  };
 
-  // Handle WebView messages
+  // Handle WebView messages with enhanced logging
   const handleWebViewMessage = (event) => {
     const message = event.nativeEvent.data;
-    console.log('WebView message:', message);
-    // Handle any messages from the WebView if needed
+    console.log('📩 WebView message:', message);
+    
+    switch(message) {
+      case 'player_ready':
+        console.log('✅ YouTube Player is ready');
+        break;
+      case 'player_playing':
+        console.log('▶️ YouTube Player started playing');
+        break;
+      default:
+        console.log('ℹ️ Unknown WebView message:', message);
+    }
   };
 
   const validateForm = () => {
@@ -247,6 +271,15 @@ export default function PrayerRequest() {
     return null;
   }
 
+  const handlePrayerRoomPress = () => {
+    if (prayerRoom?.is_active) {
+      router.push({
+        pathname: '/prayer-videostream',
+        params: { prayerRoom: JSON.stringify(prayerRoom) }
+      });
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.content}>
@@ -257,61 +290,93 @@ export default function PrayerRequest() {
             <Text style={styles.loadingText}>Loading prayer room...</Text>
           </View>
         ) : prayerRoom?.is_active ? (
-          <View style={styles.prayerCallBox}>
+          <TouchableOpacity 
+            style={styles.prayerCallBox}
+            activeOpacity={0.8}
+            onPress={handlePrayerRoomPress}
+          >
             <View style={styles.callHeader}>
               <View style={styles.liveIndicator}>
                 <View style={styles.liveDot} />
-                <Text style={styles.liveText}>LIVE</Text>
+                <Text style={styles.liveText}>LIVE NOW</Text>
               </View>
+              <Text style={styles.durationText}>
+                {prayerRoom.started_at ? `Started ${new Date(prayerRoom.started_at).toLocaleTimeString()}` : 'Live'}
+              </Text>
             </View>
 
-            <View style={styles.callContent}>
-              <Ionicons name="radio" size={24} color="#1e67cd" />
-              <Text style={styles.callTitle}>{prayerRoom.title || 'Prayer Room'}</Text>
-              {prayerRoom.current_topic && (
-                <Text style={styles.prayerTopic}>Current Topic: "{prayerRoom.current_topic}"</Text>
-              )}
-              {prayerRoom.description && (
-                <Text style={styles.prayerDescription}>{prayerRoom.description}</Text>
-              )}
-            </View>
-
-            {/* Hidden WebView for audio playback */}
-            <View style={{ width: 0, height: 0, overflow: 'hidden' }}>
+            {/* Video Player */}
+            <View style={styles.videoContainer}>
               <WebView
                 ref={webViewRef}
                 source={{ 
-                  html: getAudioOnlyHtml(extractYouTubeId(prayerRoom.youtube_url) || ''), 
+                  html: getPlayerHtml(extractYouTubeId(prayerRoom.youtube_url)),
                   baseUrl: 'https://www.youtube.com' 
                 }}
                 javaScriptEnabled={true}
                 domStorageEnabled={true}
-                allowsFullscreenVideo={false}
+                allowsFullscreenVideo={true}
                 allowsInlineMediaPlayback={true}
                 mediaPlaybackRequiresUserAction={false}
                 onMessage={handleWebViewMessage}
                 scrollEnabled={false}
-                style={{ opacity: 0 }}
+                style={styles.videoPlayer}
+                onLoadStart={() => console.log('🌐 WebView loading started')}
+                onLoadEnd={() => console.log('✅ WebView loading finished')}
+                onLoad={() => console.log('🚀 WebView loaded successfully')}
+                onError={(syntheticEvent) => {
+                  const { nativeEvent } = syntheticEvent;
+                  console.error('❌ WebView error: ', nativeEvent);
+                }}
+                onHttpError={(syntheticEvent) => {
+                  const { nativeEvent } = syntheticEvent;
+                  console.error('❌ WebView HTTP error: ', nativeEvent);
+                }}
+                onContentProcessDidTerminate={() => 
+                  console.warn('⚠️ WebView content process terminated')
+                }
+                onShouldStartLoadWithRequest={(request) => {
+                  console.log('🔗 WebView loading URL:', request.url);
+                  return true;
+                }}
               />
             </View>
 
-            {/* Visual audio wave animation */}
-            <View style={styles.audioWave}>
-              {[8, 16, 12, 20, 6, 14, 18, 10].map((height, index) => (
-                <View 
-                  key={index} 
-                  style={[
-                    styles.waveBar, 
-                    { 
-                      height, 
-                      animationDelay: `${index * 0.1}s`,
-                      backgroundColor: prayerRoom ? '#1e67cd' : '#ccc'
-                    }
-                  ]} 
-                />
-              ))}
+            <View style={styles.callContent}>
+              <Text style={styles.callTitle}>{prayerRoom.title || 'Prayer Room'}</Text>
+              
+              {prayerRoom.current_topic && (
+                <View style={styles.topicContainer}>
+                  <Text style={styles.topicLabel}>Current Prayer Topic:</Text>
+                  <Text style={styles.prayerTopic}>"{prayerRoom.current_topic}"</Text>
+                </View>
+              )}
+              
+              {prayerRoom.description && (
+                <Text style={styles.prayerDescription}>{prayerRoom.description}</Text>
+              )}
+              
+              {/* Audio controls for background playback */}
+              <View style={styles.audioControls}>
+                <Text style={styles.audioLabel}>Background Audio:</Text>
+                <View style={styles.audioWave}>
+                  {[8, 16, 12, 20, 6, 14, 18, 10].map((height, index) => (
+                    <View 
+                      key={`wave-${index}`}
+                      style={[
+                        styles.waveBar, 
+                        { 
+                          height, 
+                          animationDelay: `${index * 0.1}s`,
+                          backgroundColor: prayerRoom ? '#1e67cd' : '#ccc'
+                        }
+                      ]} 
+                    />
+                  ))}
+                </View>
+              </View>
             </View>
-          </View>
+          </TouchableOpacity>
         ) : (
           <View style={styles.inactivePrayerRoom}>
             <Ionicons name="radio" size={40} color="#999" />
@@ -622,31 +687,37 @@ const styles = StyleSheet.create({
   },
   prayerDescription: {
     fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
+    color: '#555',
+    lineHeight: 22,
     marginTop: 8,
-    lineHeight: 20,
+    fontFamily: 'Inter-Regular',
   },
   prayerTopic: {
-    fontSize: 15,
-    color: "#1e67cd",
-    marginTop: 4,
-    textAlign: "center",
-    fontWeight: '500',
+    fontSize: 16,
+    color: '#333',
+    fontFamily: 'Inter-SemiBold',
+    lineHeight: 22,
   },
   callHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 15,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#f8f9fa',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  durationText: {
+    fontSize: 12,
+    color: '#666',
+    fontFamily: 'Inter-Medium',
   },
   callTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333333",
-    marginTop: 8,
-    textAlign: "center",
-    marginBottom: 4,
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1e67cd',
+    marginBottom: 8,
+    fontFamily: 'Inter-Bold',
   },
   participantCount: {
     fontSize: 12,
