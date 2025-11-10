@@ -374,7 +374,8 @@ export default function KingdomLeadership() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8F9FA",
+    backgroundColor: "#fff",
+    paddingTop: StatusBar.currentHeight || 0, // Add padding for status bar
   },
   header: {
     flexDirection: "row",

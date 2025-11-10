@@ -12,7 +12,8 @@ import {
   SafeAreaView,
   Platform,
   Linking,
-  TouchableWithoutFeedback
+  TouchableWithoutFeedback,
+  StatusBar
 } from "react-native"
 import { WebView } from 'react-native-webview';
 import { Ionicons } from "@expo/vector-icons"
@@ -387,18 +388,6 @@ const LiveStreamScreen = () => {
         </>
       ) : null}
 
-      {/* Footer */}
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>
-          Having issues? Try watching on{' '}
-          <Text 
-            style={styles.linkText}
-            onPress={() => stream?.youtube_url && Linking.openURL(stream.youtube_url)}
-          >
-            YouTube
-          </Text>
-        </Text>
-      </View>
     </SafeAreaView>
   )
 }
@@ -407,6 +396,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#FFFFFF",
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   loadingContainer: {
     flex: 1,

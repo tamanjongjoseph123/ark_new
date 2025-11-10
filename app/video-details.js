@@ -3,8 +3,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import WebView from 'react-native-webview';
 import { StatusBar } from 'expo-status-bar';
-import { Linking, Alert } from 'react-native';
-import { useState, useRef } from 'react';
+import { Linking, Alert, useWindowDimensions } from 'react-native';
+import { useState, useRef, useEffect } from 'react';
+import * as ScreenOrientation from 'expo-screen-orientation';
 
 export default function VideoDetail() {
   const router = useRouter();
@@ -13,6 +14,16 @@ export default function VideoDetail() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const webViewRef = useRef(null);
+  const { width, height } = useWindowDimensions();
+  const isPortrait = height > width;
+  
+  const toggleOrientation = async () => {
+    if (isPortrait) {
+      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+    } else {
+      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT);
+    }
+  };
 
   console.log('Video Details Params:', { videoId, title, youtubeUrl });
 
@@ -180,18 +191,44 @@ export default function VideoDetail() {
     }
   };
 
+  const handleGoBack = () => {
+    router.back();
+  };
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, isPortrait ? null : styles.landscapeContainer]}>
       <StatusBar style="light" />
       
       {/* Header */}
       <View style={styles.header}>
-     
-        <Text style={styles.headerTitle} numberOfLines={2}>{title}</Text>
+        <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="#FFD700" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle} numberOfLines={2}>
+          {title}
+        </Text>
+        <View style={styles.headerRight} />
+      </View>
+
+      {/* Rotation Button */}
+      <View style={styles.rotateButtonContainer}>
+        <TouchableOpacity 
+          style={styles.rotateButton}
+          onPress={toggleOrientation}
+        >
+          <Ionicons 
+            name={isPortrait ? 'phone-landscape-outline' : 'phone-portrait-outline'} 
+            size={24} 
+            color="#FFD700" 
+          />
+          <Text style={styles.rotateButtonText}>
+            {isPortrait ? 'Rotate to Landscape' : 'Rotate to Portrait'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Video Player */}
-      <View style={styles.videoContainer}>
+      <View style={[styles.videoContainer, { marginTop: 20 }]}>
         {isLoading && (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#FF0000" />
@@ -253,27 +290,61 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
+    paddingHorizontal: 1,
+    justifyContent: 'center',
+  },
+  landscapeContainer: {
+    paddingHorizontal: 0,
+  },
+  rotateButtonContainer: {
+    alignItems: 'center',
+    marginVertical: 15,
+  },
+  rotateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingVertical: 5,
+    paddingHorizontal: 15,
+    borderRadius: 5,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#000',
+    justifyContent: 'space-between',
+    padding: 15,
+    backgroundColor: 'transparent',
+    marginBottom: 2,
   },
   backButton: {
     padding: 8,
+    marginRight: 10,
+  },
+  headerRight: {
+    width: 40, // Same as back button for balance
   },
   headerTitle: {
     flex: 1,
-    marginLeft: 16,
     fontSize: 18,
     fontWeight: 'bold',
     color: '#FFF',
+    textAlign: 'center',
+    paddingHorizontal: 20,
   },
   videoContainer: {
     width: '100%',
-    height: Dimensions.get('window').height * 0.4,
+    aspectRatio: 14/9,
     backgroundColor: '#000',
+    marginTop: -0,  // Move the video up by 50 units
+    marginBottom: 30,
+    overflow: 'hidden',
+    borderRadius: 8,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.8,
+    shadowRadius: 2,
+    alignSelf: 'center',
   },
   video: {
     flex: 1,
@@ -312,6 +383,12 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  rotateButtonText: {
+    color: '#FFD700',
+    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: '500',
   },
   watchFullButton: {
     flexDirection: 'row',

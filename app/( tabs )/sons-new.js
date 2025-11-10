@@ -1,6 +1,6 @@
 "use client";
 
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -71,7 +71,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F8F8',
   },
   header: {
-    paddingTop: 50,
+    paddingTop: StatusBar.currentHeight + 10,
     paddingBottom: 20,
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,

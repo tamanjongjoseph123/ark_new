@@ -11,6 +11,7 @@ import {
   Platform,
   Modal,
   ActivityIndicator,
+  StatusBar,
 } from "react-native"
 import { LinearGradient } from "expo-linear-gradient"
 import { Ionicons } from "@expo/vector-icons"
@@ -474,9 +475,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F8F8F8",
+    paddingTop: StatusBar.currentHeight, // Add padding for status bar
   },
   header: {
-    paddingTop: 50,
+    paddingTop: StatusBar.currentHeight + 10,
     paddingBottom: 20,
     paddingHorizontal: 20,
     borderBottomLeftRadius: 20,
@@ -509,6 +511,7 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
     width: '100%',
+    paddingTop: 0, // Remove any top padding from scroll view
   },
   scrollContent: {
     flexGrow: 1,

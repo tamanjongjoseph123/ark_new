@@ -184,15 +184,17 @@ export default function KingdomLeadership() {
                 </TouchableOpacity>
               </View>
             )}
-            {!loadingCourses && courses.length > 0 && (
+            {!loadingCourses && (
               <>
                 <LinearGradient colors={["#3498DB", "#2980B9"]} style={styles.welcomeSection}>
                   <Ionicons name="school" size={32} color="#FFF" />
                   <Text style={styles.welcomeTitle}>Welcome to Sons of John Chi</Text>
-                  <Text style={styles.welcomeSubtitle}>Explore our courses</Text>
+                  <Text style={styles.welcomeSubtitle}>
+                    {courses.length > 0 ? 'Explore our courses' : 'No courses available at the moment'}
+                  </Text>
                 </LinearGradient>
                 
-                {/* Live Stream Button - Below Welcome */}
+                {/* Live Stream Button - Always Visible */}
                 <TouchableOpacity 
                   style={[styles.liveButton, { marginTop: 10 }]}
                   onPress={() => router.push("/livestreaming")}
@@ -404,11 +406,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F8F9FA",
+    paddingTop: StatusBar.currentHeight, // Add padding for status bar
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingTop: 50,
+    paddingTop: 10, // Reduced from 50 to 10 since we're using StatusBar.currentHeight
     paddingBottom: 20,
     paddingHorizontal: 20,
   },
