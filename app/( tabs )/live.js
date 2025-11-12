@@ -11,24 +11,27 @@ import {
   Modal,
   FlatList,
   SafeAreaView,
+  Dimensions
 } from "react-native"
 import { Video, ResizeMode } from "expo-av"
 import { StatusBar } from "expo-status-bar"
 import { useIsFocused } from "@react-navigation/native"
 import { activateKeepAwake, deactivateKeepAwake } from "expo-keep-awake"
 import { getLiveStreamChannel } from "../services/api"
+import * as ScreenOrientation from 'expo-screen-orientation';
+import { Ionicons } from '@expo/vector-icons';
 
 const AVAILABLE_LANGUAGES = [
-  { code: "en", name: "English", flag: "🇺🇸" },
-  { code: "es", name: "Español", flag: "🇪🇸" },
-  { code: "fr", name: "Français", flag: "🇫🇷" },
-  { code: "de", name: "Deutsch", flag: "🇩🇪" },
-  { code: "it", name: "Italiano", flag: "🇮🇹" },
-  { code: "pt", name: "Português", flag: "🇵🇹" },
-  { code: "ja", name: "日本語", flag: "🇯🇵" },
-  { code: "ko", name: "한국어", flag: "🇰🇷" },
-  { code: "zh", name: "中文", flag: "🇨🇳" },
-  { code: "ar", name: "العربية", flag: "🇸🇦" },
+  { code: "en", name: "English", flag: "" },
+  { code: "es", name: "Español", flag: "" },
+  { code: "fr", name: "Français", flag: "" },
+  { code: "de", name: "Deutsch", flag: "" },
+  { code: "it", name: "Italiano", flag: "" },
+  { code: "pt", name: "Português", flag: "" },
+  { code: "ja", name: "", flag: "" },
+  { code: "ko", name: "", flag: "" },
+  { code: "zh", name: "", flag: "" },
+  { code: "ar", name: "", flag: "" },
 ]
 
 export default function LiveStream() {
@@ -42,6 +45,9 @@ export default function LiveStream() {
   const [backgroundRetryCount, setBackgroundRetryCount] = useState(0)
   const [selectedLanguage, setSelectedLanguage] = useState(AVAILABLE_LANGUAGES[0])
   const [isLanguageModalVisible, setIsLanguageModalVisible] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const { width, height } = Dimensions.get('window')
+  const isPortrait = height > width
 
   const videoRef = useRef(null)
   const isFocused = useIsFocused()
@@ -215,6 +221,15 @@ export default function LiveStream() {
     </TouchableOpacity>
   )
 
+  const toggleFullscreen = async () => {
+    if (isFullscreen) {
+      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP)
+    } else {
+      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE_LEFT)
+    }
+    setIsFullscreen(!isFullscreen)
+  }
+
   // Don't render video if no stream URL
   if (isLoadingStream || !streamUrl) {
     return (
@@ -234,10 +249,30 @@ export default function LiveStream() {
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      <TouchableOpacity style={styles.languageButton} onPress={() => setIsLanguageModalVisible(true)}>
-        <Text style={styles.languageButtonFlag}>{selectedLanguage.flag}</Text>
-        <Text style={styles.languageButtonText}>{selectedLanguage.code.toUpperCase()}</Text>
-      </TouchableOpacity>
+      {/* Language and Rotation Buttons Container */}
+      <View style={styles.topButtonsContainer}>
+        {/* Rotation Button */}
+        <TouchableOpacity 
+          style={styles.rotateButton}
+          onPress={toggleFullscreen}
+          activeOpacity={0.7}
+        >
+          <Ionicons 
+            name={isFullscreen ? 'phone-portrait' : 'phone-landscape'} 
+            size={20} 
+            color="#fff" 
+          />
+        </TouchableOpacity>
+        
+        {/* Language Button */}
+        <TouchableOpacity
+          style={styles.languageButton}
+          onPress={() => setIsLanguageModalVisible(true)}
+        >
+          <Text style={styles.languageButtonFlag}>{selectedLanguage.flag}</Text>
+          <Text style={styles.languageButtonText}>{selectedLanguage.code.toUpperCase()}</Text>
+        </TouchableOpacity>
+      </View>
 
       <Modal
         visible={isLanguageModalVisible}
@@ -352,11 +387,26 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: "100%",
   },
-  languageButton: {
+  topButtonsContainer: {
     position: "absolute",
     top: 50,
     right: 20,
     zIndex: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  rotateButton: {
+    backgroundColor: "rgba(0,0,0,0.7)",
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  languageButton: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "rgba(0,0,0,0.7)",

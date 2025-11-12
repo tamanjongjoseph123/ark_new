@@ -32,8 +32,9 @@ export async function registerForPushNotifications() {
     }
     
     console.log('Fetching Expo push token...');
+    // Using hardcoded project ID for reliability
     const expoPushToken = await Notifications.getExpoPushTokenAsync({
-      projectId: Constants.expoConfig?.extra?.eas?.projectId,
+      projectId: '340de50d-477f-40d8-b8a7-a6a1a0dd33f6',
     });
     
     const token = expoPushToken.data;
@@ -95,14 +96,24 @@ export async function registerDeviceToken(token: string) {
 }
 
 export function setupNotificationListeners(navigation: any) {
+  console.log('Setting up notification listeners...');
+  
   // This listener is called when a notification is received while the app is in the foreground
   const notificationListener = Notifications.addNotificationReceivedListener(notification => {
-    console.log('Notification received:', notification);
     const { title, body, data } = notification.request.content;
+    
+    console.log('=== NOTIFICATION RECEIVED ===');
+    console.log('Title:', title);
+    console.log('Body:', body);
+    console.log('Data:', JSON.stringify(data, null, 2));
+    console.log('Notification object:', JSON.stringify(notification, null, 2));
     
     // Handle navigation based on notification data
     if (data?.type === 'new_devotion') {
+      console.log('New devotion notification detected, navigating to Devotions...');
       navigation.navigate('Devotions');
+    } else {
+      console.log('Notification is not a devotion notification or missing type');
     }
   });
 
@@ -110,10 +121,18 @@ export function setupNotificationListeners(navigation: any) {
   const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
     const { data } = response.notification.request.content;
     
+    console.log('=== NOTIFICATION TAPPED ===');
+    console.log('Notification data:', JSON.stringify(data, null, 2));
+    
     if (data?.type === 'new_devotion') {
+      console.log('Tapped devotion notification, navigating to Devotions...');
       navigation.navigate('Devotions');
+    } else {
+      console.log('Tapped notification is not a devotion notification');
     }
   });
+  
+  console.log('Notification listeners successfully set up');
 
   return () => {
     Notifications.removeNotificationSubscription(notificationListener);

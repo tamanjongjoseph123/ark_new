@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "32627244237",
+    "project_id": "ark-of-god",
+    "storage_bucket": "ark-of-god.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:32627244237:android:2a07d6e9f116ff08537d84",
+        "android_client_info": {
+          "package_name": "com.jfsn.arkofgod"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBYiVAReBRk-dTf_N5EhzmIAjMh634i4A8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

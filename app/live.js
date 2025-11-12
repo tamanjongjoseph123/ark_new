@@ -5,12 +5,16 @@ import {
   ActivityIndicator,
   Text,
   Button,
+  TouchableOpacity,
+  Dimensions
 } from "react-native";
 import { Video, ResizeMode } from "expo-av";
 import { StatusBar } from "expo-status-bar";
 import { useIsFocused } from "@react-navigation/native";
-import { activateKeepAwake, deactivateKeepAwake } from "expo-keep-awake";
+import { activateKeepAwakeAsync, deactivateKeepAwakeAsync } from "expo-keep-awake";
 import { getLiveStreamChannel } from "./services/api";
+import { Ionicons } from '@expo/vector-icons';
+import * as ScreenOrientation from 'expo-screen-orientation';
 
 export default function LiveStream() {
   const [isLoading, setIsLoading] = useState(true);
@@ -21,21 +25,82 @@ export default function LiveStream() {
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [isStreamOffline, setIsStreamOffline] = useState(false);
   const [backgroundRetryCount, setBackgroundRetryCount] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const videoRef = useRef(null);
   const isFocused = useIsFocused();
   const maxRetries = 3;
   const backgroundRetryInterval = useRef(null);
+  const { width, height } = Dimensions.get('window');
+  const isPortrait = height > width;
+
+  // Handle screen orientation changes
+  useEffect(() => {
+    let subscription;
+
+    const updateOrientation = async () => {
+      try {
+        const orientation = await ScreenOrientation.getOrientationAsync();
+        const isLandscape = orientation === ScreenOrientation.Orientation.LANDSCAPE_LEFT || 
+                          orientation === ScreenOrientation.Orientation.LANDSCAPE_RIGHT;
+        setIsFullscreen(isLandscape);
+      } catch (error) {
+        console.error('Error getting orientation:', error);
+      }
+    };
+
+    // Initial orientation check
+    updateOrientation();
+
+    // Subscribe to orientation changes
+    subscription = ScreenOrientation.addOrientationChangeListener(updateOrientation);
+
+    return () => {
+      if (subscription) {
+        ScreenOrientation.removeOrientationChangeListener(subscription);
+      }
+      // Reset to portrait when component unmounts
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+    };
+  }, []);
+
+  // Toggle between portrait and landscape
+  const toggleFullscreen = async () => {
+    try {
+      if (isFullscreen) {
+        // Return to portrait
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+      } else {
+        // Go to landscape
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+      }
+      // Update state after a small delay to ensure smooth transition
+      setTimeout(() => {
+        setIsFullscreen(!isFullscreen);
+      }, 100);
+    } catch (error) {
+      console.error('Error toggling fullscreen:', error);
+    }
+  };
 
   // Keep screen awake when video is playing
   useEffect(() => {
-    if (isFocused && isVideoReady && !isStreamOffline && !isLoading) {
-      activateKeepAwake();
-    } else {
-      deactivateKeepAwake();
+    let mounted = true;
+
+    const updateKeepAwake = async () => {
+      if (isFocused && isVideoReady && !isStreamOffline && !isLoading) {
+        await activateKeepAwakeAsync();
+      } else {
+        await deactivateKeepAwakeAsync();
+      }
+    };
+
+    if (mounted) {
+      updateKeepAwake().catch(console.error);
     }
 
     return () => {
-      deactivateKeepAwake();
+      mounted = false;
+      deactivateKeepAwakeAsync().catch(console.error);
     };
   }, [isFocused, isVideoReady, isStreamOffline, isLoading]);
 
@@ -126,13 +191,13 @@ export default function LiveStream() {
         console.error("Playback error:", status.error);
         setIsStreamOffline(true);
         setError("The live stream is currently offline. Please try again later.");
-        deactivateKeepAwake();
+deactivateKeepAwakeAsync().catch(console.error);
       } else if (status.isPlaying) {
         setError(null);
         setIsStreamOffline(false);
-        activateKeepAwake();
+activateKeepAwakeAsync().catch(console.error);
       } else if (status.didJustFinish || !status.isPlaying) {
-        deactivateKeepAwake();
+deactivateKeepAwakeAsync().catch(console.error);
       }
     }
   };
@@ -191,6 +256,19 @@ export default function LiveStream() {
     <View style={styles.container}>
       <StatusBar style="light" />
       
+      {/* Rotation Button */}
+      <TouchableOpacity 
+        style={styles.rotateButton}
+        onPress={toggleFullscreen}
+        activeOpacity={0.7}
+      >
+        <Ionicons 
+          name={isFullscreen ? 'phone-portrait' : 'phone-landscape'} 
+          size={24} 
+          color="#fff" 
+        />
+      </TouchableOpacity>
+      
       {isLoading && !isStreamOffline && (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#ffffff" />
@@ -242,6 +320,26 @@ const styles = StyleSheet.create({
   video: {
     width: "100%",
     height: "100%",
+    backgroundColor: '#000',
+  },
+  rotateButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 5,
   },
   loadingContainer: {
     position: "absolute",

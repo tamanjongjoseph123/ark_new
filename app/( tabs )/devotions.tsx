@@ -83,20 +83,21 @@ export default function DevotionsScreen() {
 
   // Set up notification listeners and badge state
   useEffect(() => {
+    console.log('DevotionsScreen: Component mounted, loading devotions...');
     loadDevotions();
     
     const registerAndSubscribe = async () => {
       try {
-        console.log('Requesting push notification permissions...');
+        console.log('DevotionsScreen: Requesting push notification permissions...');
         const token = await registerForPushNotifications();
         
         if (token) {
-          console.log('Received push token, registering with server...');
+          console.log('DevotionsScreen: Received push token, registering with server...');
           try {
-            await registerDeviceToken(token);
-            console.log('Successfully registered device token with server');
+            const result = await registerDeviceToken(token);
+            console.log('DevotionsScreen: Device token registration result:', result);
           } catch (regError) {
-            console.error('Failed to register device token:', regError);
+            console.error('DevotionsScreen: Failed to register device token:', regError);
           }
         } else {
           console.log('No push token received. User may have denied permissions.');
@@ -104,41 +105,57 @@ export default function DevotionsScreen() {
         
         // Listen for incoming notifications
         notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-          const { data } = notification.request.content;
-          console.log('Notification received:', data);
+          const { data, title, body } = notification.request.content;
+          console.log('=== DEVOTIONS SCREEN: NOTIFICATION RECEIVED ===');
+          console.log('Title:', title);
+          console.log('Body:', body);
+          console.log('Data:', JSON.stringify(data, null, 2));
           
           if (data?.type === 'new_devotion') {
-            console.log('New devotion notification received, refreshing devotions...');
+            console.log('DevotionsScreen: New devotion notification received, refreshing devotions...');
+            console.log('Devotion data:', JSON.stringify(data, null, 2));
             setHasNewDevotion(true);
             loadDevotions();
+          } else {
+            console.log('DevotionsScreen: Received non-devotion notification or missing type');
           }
         });
         
         // Listen for notification taps
         responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-          const { data } = response.notification.request.content;
-          console.log('User tapped notification:', data);
+          const { data, title, body } = response.notification.request.content;
+          console.log('=== DEVOTIONS SCREEN: NOTIFICATION TAPPED ===');
+          console.log('Title:', title);
+          console.log('Body:', body);
+          console.log('Data:', JSON.stringify(data, null, 2));
           
           if (data?.type === 'new_devotion') {
-            console.log('User tapped new devotion notification, refreshing devotions...');
+            console.log('DevotionsScreen: User tapped new devotion notification, refreshing devotions...');
+            console.log('Devotion data:', JSON.stringify(data, null, 2));
             setHasNewDevotion(false);
             loadDevotions();
+          } else {
+            console.log('DevotionsScreen: Tapped notification is not a devotion notification');
           }
         });
         
       } catch (error) {
-        console.error('Error in notification setup:', error);
+        console.error('DevotionsScreen: Error in notification setup:', error);
+      } finally {
+        console.log('DevotionsScreen: Notification setup completed');
       }
     };
     
     registerAndSubscribe();
     
     return () => {
-      console.log('Cleaning up notification listeners...');
+      console.log('DevotionsScreen: Cleaning up notification listeners...');
       if (notificationListener.current) {
+        console.log('DevotionsScreen: Removing notification listener');
         Notifications.removeNotificationSubscription(notificationListener.current);
       }
       if (responseListener.current) {
+        console.log('DevotionsScreen: Removing response listener');
         Notifications.removeNotificationSubscription(responseListener.current);
       }
     };
