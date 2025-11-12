@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import * as SplashScreen from 'expo-splash-screen';
 import { View } from 'react-native';
 import { NewDevotionProvider } from './context/NewDevotionContext';
+import { AuthProvider } from './Contexts/AuthContext';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -18,8 +19,9 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <NewDevotionProvider>
-      <View style={{ flex: 1 }}>
+    <AuthProvider>
+      <NewDevotionProvider>
+        <View style={{ flex: 1 }}>
         <Stack
           screenOptions={{
             headerShown: false, // This will hide the header for all screens by default
@@ -52,7 +54,8 @@ export default function RootLayout() {
           <Stack.Screen name="mentorcourses" options={{ headerTitle: "MentorShip Courses" }} />
           <Stack.Screen name="video-details-two" options={{ headerTitle: "Course Details" }} />
         </Stack>
-      </View>
-    </NewDevotionProvider>
+        </View>
+      </NewDevotionProvider>
+    </AuthProvider>
   );
 }

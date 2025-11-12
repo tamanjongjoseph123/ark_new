@@ -185,22 +185,114 @@ export const getCourseVideo = async (id) => {
 // Comments
 export const listComments = async (videoId) => {
     try {
-        const url = videoId ? `/api/comments/?video=${encodeURIComponent(videoId)}` : '/api/comments/';
-        const response = await api.get(url);
-        return response.data;
+        // Try with both parameter names to ensure compatibility
+        let url = videoId ? `/api/comments/?video_id=${encodeURIComponent(videoId)}` : '/api/comments/';
+        let response = await api.get(url);
+        
+        // If no results, try with the alternative parameter name
+        if ((!response.data || response.data.length === 0) && videoId) {
+            const altUrl = `/api/comments/?video=${encodeURIComponent(videoId)}`;
+            const altResponse = await api.get(altUrl);
+            if (altResponse.data && altResponse.data.length > 0) {
+                return altResponse.data;
+            }
+        }
+        
+        return response.data || [];
     } catch (error) {
         console.error('Error fetching comments:', error);
+        console.error('Error details:', error.response?.data || error.message);
         return [];
     }
 };
 
 export const postComment = async ({ token, video, text, parent = null }) => {
     try {
-        const headers = token ? { Authorization: `Bearer ${token}` } : {};
-        const response = await api.post('/api/comments/', { video, parent, text }, { headers });
+        const headers = token ? { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        } : {};
+        
+        const payload = {
+            video: video,  // Changed back to 'video' to match API expectations
+            text: text,
+            parent_id: parent
+        };
+        
+        console.log('Final payload being sent:', JSON.stringify(payload, null, 2));
+        
+        console.log('Posting comment with payload:', payload); // Debug log
+        
+        const response = await api.post('/api/comments/', payload, { 
+            headers,
+            validateStatus: () => true // This will prevent axios from throwing on 400/500
+        });
+        
+        if (response.status >= 400) {
+            console.error('API Error Response:', response.data);
+            throw new Error(response.data?.message || 'Failed to post comment');
+        }
+        
         return response.data;
     } catch (error) {
         console.error('Error posting comment:', error);
+        if (error.response) {
+            console.error('Response data:', error.response.data);
+            console.error('Response status:', error.response.status);
+            console.error('Response headers:', error.response.headers);
+        } else if (error.request) {
+            console.error('Request:', error.request);
+        } else {
+            console.error('Error message:', error.message);
+        }
+        throw error;
+    }
+};
+
+export const postReply = async ({ token, commentId, text, videoId }) => {
+    try {
+        const headers = {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        };
+        
+        const payload = {
+            text: text,
+            video: videoId  // Using 'video' as the field name to match API expectations
+        };
+        
+        console.log('Posting reply with payload:', JSON.stringify(payload, null, 2));  // Better formatted debug log
+        
+        const response = await api.post(
+            `/api/comments/${commentId}/reply/`, 
+            payload,
+            { headers }
+        );
+        return response.data;
+    } catch (error) {
+        console.error('Error posting reply:', error);
+        if (error.response) {
+            console.error('Response data:', error.response.data);
+            console.error('Response status:', error.response.status);
+            console.error('Response headers:', error.response.headers);
+        } else if (error.request) {
+            console.error('Request:', error.request);
+        } else {
+            console.error('Error message:', error.message);
+        }
+        throw error;
+    }
+};
+
+export const getReplies = async (commentId, token) => {
+    try {
+        const response = await api.get(
+            `/api/comments/${commentId}/replies/`,
+            token ? { headers: { 'Authorization': `Bearer ${token}` } } : {}
+        );
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching replies:', error);
         throw error;
     }
 };

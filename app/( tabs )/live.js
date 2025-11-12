@@ -45,7 +45,7 @@ export default function LiveStream() {
   const [backgroundRetryCount, setBackgroundRetryCount] = useState(0)
   const [selectedLanguage, setSelectedLanguage] = useState(AVAILABLE_LANGUAGES[0])
   const [isLanguageModalVisible, setIsLanguageModalVisible] = useState(false)
-  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [orientation, setOrientation] = useState('PORTRAIT')
   const { width, height } = Dimensions.get('window')
   const isPortrait = height > width
 
@@ -221,14 +221,41 @@ export default function LiveStream() {
     </TouchableOpacity>
   )
 
-  const toggleFullscreen = async () => {
-    if (isFullscreen) {
-      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP)
-    } else {
-      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE_LEFT)
+  // Handle device orientation changes
+  useEffect(() => {
+    let subscription
+
+    const updateOrientation = (orientationInfo) => {
+      const newOrientation = orientationInfo.orientationInfo.orientation
+      if (
+        newOrientation === ScreenOrientation.Orientation.PORTRAIT_UP ||
+        newOrientation === ScreenOrientation.Orientation.PORTRAIT_DOWN
+      ) {
+        setOrientation('PORTRAIT')
+      } else {
+        setOrientation('LANDSCAPE')
+      }
     }
-    setIsFullscreen(!isFullscreen)
-  }
+
+    // Initial orientation check
+    ScreenOrientation.getOrientationAsync().then(orientationInfo => {
+      updateOrientation({ orientationInfo: { orientation: orientationInfo } })
+    })
+
+    // Subscribe to orientation changes
+    subscription = ScreenOrientation.addOrientationChangeListener(updateOrientation)
+
+    // Unlock orientation to allow automatic rotation
+    ScreenOrientation.unlockAsync()
+
+    return () => {
+      if (subscription) {
+        ScreenOrientation.removeOrientationChangeListener(subscription)
+      }
+      // Reset to portrait when component unmounts
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP)
+    }
+  }, [])
 
   // Don't render video if no stream URL
   if (isLoadingStream || !streamUrl) {
@@ -254,11 +281,19 @@ export default function LiveStream() {
         {/* Rotation Button */}
         <TouchableOpacity 
           style={styles.rotateButton}
-          onPress={toggleFullscreen}
+          onPress={async () => {
+            if (orientation === 'PORTRAIT') {
+              await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE_LEFT)
+              setOrientation('LANDSCAPE')
+            } else {
+              await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP)
+              setOrientation('PORTRAIT')
+            }
+          }}
           activeOpacity={0.7}
         >
           <Ionicons 
-            name={isFullscreen ? 'phone-portrait' : 'phone-landscape'} 
+            name={orientation === 'PORTRAIT' ? 'phone-landscape' : 'phone-portrait'} 
             size={20} 
             color="#fff" 
           />

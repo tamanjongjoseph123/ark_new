@@ -4,8 +4,9 @@ import { Ionicons } from '@expo/vector-icons';
 import WebView from 'react-native-webview';
 import { StatusBar } from 'expo-status-bar';
 import { Linking, Alert } from 'react-native';
-import { useState, useRef, useEffect } from 'react';
-import { getCourseVideo, listComments, postComment, login } from './services/api';
+import React, { useState, useRef, useEffect, useContext } from 'react';
+import { getCourseVideo, listComments, postComment, postReply, getReplies } from './services/api';
+import { AuthContext } from './Contexts/AuthContext';
 
 export default function VideoDetail() {
   const router = useRouter();
@@ -24,12 +25,11 @@ export default function VideoDetail() {
   const [comments, setComments] = useState([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentText, setCommentText] = useState('');
-  const [authToken, setAuthToken] = useState(null);
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [replyText, setReplyText] = useState('');
+  const [loadingReplies, setLoadingReplies] = useState({});
+  const { userToken, setUserToken, removeToken } = useContext(AuthContext);
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [loginUsername, setLoginUsername] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
-  const [loginLoading, setLoginLoading] = useState(false);
-  const [loginError, setLoginError] = useState(null);
 
   console.log('Video Details Params:', { videoId, title, youtubeUrl });
 
@@ -71,42 +71,106 @@ export default function VideoDetail() {
 
   const handleSendComment = async () => {
     if (!commentText.trim()) return;
-    if (!authToken) {
+    
+    if (!userToken) {
       setShowLoginModal(true);
       return;
     }
+
     try {
-      await postComment({ token: authToken, video: Number(courseVideoId), text: commentText.trim(), parent: null });
+      setCommentsLoading(true);
+      
+      if (replyingTo) {
+        // Handle reply
+        await postReply({
+          token: userToken,
+          commentId: replyingTo.id,
+          text: commentText.trim(),
+          videoId: Number(courseVideoId)
+        });
+        setReplyingTo(null);
+      } else {
+        // Handle new comment
+        await postComment({ 
+          token: userToken, 
+          video: Number(courseVideoId), 
+          text: commentText.trim(), 
+          parent: null 
+        });
+      }
+      
+      // Clear the input
       setCommentText('');
+      
+      // Force a refresh of the comments
       const refreshed = await listComments(courseVideoId);
-      setComments(Array.isArray(refreshed) ? refreshed : []);
+      
+      if (Array.isArray(refreshed)) {
+        setComments(refreshed);
+      } else {
+        // If the response isn't an array, try to get comments again with the video ID as a string
+        const retryRefreshed = await listComments(courseVideoId.toString());
+        setComments(Array.isArray(retryRefreshed) ? retryRefreshed : []);
+      }
+      
+      // Reset loading state
+      setCommentsLoading(false);
     } catch (e) {
-      RNAlert.alert('Error', 'Failed to post comment.');
+      console.error('Error posting comment:', e);
+      if (e?.response?.status === 401) {
+        removeToken();
+        setShowLoginModal(true);
+        RNAlert.alert('Session Expired', 'Please log in again to continue.');
+      } else {
+        RNAlert.alert('Error', `Failed to ${replyingTo ? 'post reply' : 'post comment'}. Please try again.`);
+      }
     }
   };
 
-  const handleLogin = async () => {
-    if (!loginUsername || !loginPassword) {
-      setLoginError('Enter username and password');
+  const handleLoadReplies = async (commentId) => {
+    if (!userToken) {
+      setShowLoginModal(true);
       return;
     }
-    setLoginLoading(true);
-    setLoginError(null);
+
     try {
-      const data = await login({ username: loginUsername, password: loginPassword });
-      setAuthToken(data?.token || null);
-      setShowLoginModal(false);
-      setLoginUsername('');
-      setLoginPassword('');
-      // Retry pending comment after login
-      if (commentText.trim()) {
-        await handleSendComment();
-      }
+      setLoadingReplies(prev => ({ ...prev, [commentId]: true }));
+      const replies = await getReplies(commentId, userToken);
+      
+      setComments(prev => prev.map(comment => {
+        if (comment.id === commentId) {
+          return { ...comment, replies: replies, replies_loaded: true };
+        }
+        return comment;
+      }));
     } catch (e) {
-      setLoginError('Invalid credentials');
+      console.error('Error loading replies:', e);
+      if (e?.response?.status === 401) {
+        removeToken();
+        setShowLoginModal(true);
+        RNAlert.alert('Session Expired', 'Please log in again to continue.');
+      } else {
+        RNAlert.alert('Error', 'Failed to load replies. Please try again.');
+      }
     } finally {
-      setLoginLoading(false);
+      setLoadingReplies(prev => ({ ...prev, [commentId]: false }));
     }
+  };
+
+  const handleReply = (comment) => {
+    if (!userToken) {
+      setShowLoginModal(true);
+      return;
+    }
+    setReplyingTo(comment);
+    setCommentText(`@${comment.user?.username || 'User'} `);
+    // Optionally scroll to the input
+  };
+
+
+  const handleLogin = () => {
+    // This will trigger the AuthContext's login flow
+    router.push('/login');
   };
 
   // Language options with their corresponding stream URLs
@@ -427,34 +491,88 @@ export default function VideoDetail() {
                   data={comments}
                   keyExtractor={(item) => String(item.id)}
                   renderItem={({ item }) => (
-                    <View style={{ marginBottom: 14 }}>
+                    <View style={[styles.commentContainer, { marginBottom: 14 }]}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
                         <Ionicons name="person-circle" size={22} color="#999" />
-                        <Text style={{ marginLeft: 6, fontWeight: '600', color: '#2C3E50' }}>{item.user?.username || 'User'}</Text>
+                        <Text style={{ marginLeft: 6, fontWeight: '600', color: '#2C3E50' }}>
+                          {item.user?.username || 'User'}
+                        </Text>
+                        <Text style={{ marginLeft: 'auto', fontSize: 12, color: '#888' }}>
+                          {new Date(item.created_at).toLocaleDateString()}
+                        </Text>
                       </View>
-                      <Text style={{ color: '#2C3E50' }}>{item.text}</Text>
-                      {(item.replies || []).map((r) => (
-                        <View key={r.id} style={{ marginTop: 8, marginLeft: 28 }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-                            <Ionicons name="person" size={18} color="#bbb" />
-                            <Text style={{ marginLeft: 6, fontWeight: '600', color: '#2C3E50' }}>{r.user?.username || 'User'}</Text>
-                          </View>
-                          <Text style={{ color: '#2C3E50' }}>{r.text}</Text>
+                      <Text style={{ color: '#2C3E50', marginBottom: 6 }}>{item.text}</Text>
+                      
+                      {/* Reply button */}
+                      <TouchableOpacity 
+                        onPress={() => handleReply(item)}
+                        style={styles.replyButton}
+                      >
+                        <Ionicons name="arrow-undo" size={14} color="#666" />
+                        <Text style={styles.replyButtonText}>Reply</Text>
+                      </TouchableOpacity>
+                      
+                      {/* Replies section */}
+                      {item.reply_count > 0 && (
+                        <View>
+                          {!item.replies_loaded ? (
+                            <TouchableOpacity 
+                              onPress={() => handleLoadReplies(item.id)}
+                              style={styles.viewRepliesButton}
+                            >
+                              <Text style={styles.viewRepliesText}>
+                                {loadingReplies[item.id] 
+                                  ? 'Loading...' 
+                                  : `View ${item.reply_count} ${item.reply_count === 1 ? 'reply' : 'replies'}`}
+                              </Text>
+                            </TouchableOpacity>
+                          ) : (
+                            <View style={styles.repliesContainer}>
+                              {item.replies?.map((reply) => (
+                                <View key={reply.id} style={styles.replyContainer}>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                                    <Ionicons name="arrow-forward" size={14} color="#bbb" />
+                                    <Ionicons name="person" size={16} color="#999" style={{ marginLeft: 4 }} />
+                                    <Text style={{ marginLeft: 4, fontWeight: '600', fontSize: 13, color: '#2C3E50' }}>
+                                      {reply.user?.username || 'User'}
+                                    </Text>
+                                    <Text style={{ marginLeft: 'auto', fontSize: 11, color: '#888' }}>
+                                      {new Date(reply.created_at).toLocaleDateString()}
+                                    </Text>
+                                  </View>
+                                  <Text style={{ color: '#2C3E50', fontSize: 14, marginLeft: 24 }}>{reply.text}</Text>
+                                </View>
+                              ))}
+                            </View>
+                          )}
                         </View>
-                      ))}
-                    </View>
+                      )}
+                  </View>
                   )}
                   ListEmptyComponent={<Text style={{ color: '#666' }}>No comments yet.</Text>}
                 />
               )}
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 8, borderTopWidth: 1, borderColor: '#eee', backgroundColor: '#FFF' }}>
+            {replyingTo && (
+              <View style={styles.replyingToContainer}>
+                <Text style={styles.replyingToText}>
+                  Replying to @{replyingTo.user?.username || 'user'}
+                </Text>
+                <TouchableOpacity onPress={() => setReplyingTo(null)}>
+                  <Ionicons name="close" size={18} color="#666" />
+                </TouchableOpacity>
+              </View>
+            )}
+            <View style={styles.commentInputContainer}>
               <TextInput
                 value={commentText}
                 onChangeText={setCommentText}
-                placeholder={authToken ? "Add a comment..." : "Sign in to comment..."}
+                placeholder={replyingTo 
+                  ? `Replying to @${replyingTo.user?.username || 'user'}...`
+                  : userToken ? "Add a comment..." : "Sign in to comment..."
+                }
                 style={{ flex: 1, paddingVertical: 10, paddingHorizontal: 12, backgroundColor: '#F5F5F7', borderRadius: 20 }}
-                onFocus={() => { if (!authToken) setShowLoginModal(true); }}
+                onFocus={() => { if (!userToken) setShowLoginModal(true); }}
               />
               <TouchableOpacity onPress={handleSendComment} style={{ marginLeft: 10 }}>
                 <Ionicons name="send" size={22} color="#3498DB" />
@@ -503,45 +621,99 @@ export default function VideoDetail() {
       </Modal>
 
       {/* Login Modal for commenting */}
-      <Modal
-        visible={showLoginModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowLoginModal(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowLoginModal(false)}
+      {showLoginModal && (
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={showLoginModal}
+          onRequestClose={() => setShowLoginModal(false)}
         >
-          <View style={styles.languageModal}>
-            <Text style={styles.languageModalTitle}>Sign in to comment</Text>
-            {loginError && <Text style={{ color: 'red', marginBottom: 8, textAlign: 'center' }}>{loginError}</Text>}
-            <TextInput
-              value={loginUsername}
-              onChangeText={setLoginUsername}
-              placeholder="Username"
-              autoCapitalize="none"
-              style={{ backgroundColor: '#F5F5F7', padding: 12, borderRadius: 8, marginBottom: 8 }}
-            />
-            <TextInput
-              value={loginPassword}
-              onChangeText={setLoginPassword}
-              placeholder="Password"
-              secureTextEntry
-              style={{ backgroundColor: '#F5F5F7', padding: 12, borderRadius: 8, marginBottom: 12 }}
-            />
-            <TouchableOpacity onPress={handleLogin} style={[styles.retryButton, { backgroundColor: '#3498DB', alignSelf: 'center' }]} disabled={loginLoading}>
-              <Text style={styles.retryButtonText}>{loginLoading ? 'Signing in...' : 'Sign In'}</Text>
-            </TouchableOpacity>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Sign In to Comment</Text>
+              <Text style={styles.modalText}>You need to be signed in to post a comment.</Text>
+              <View style={styles.buttonContainer}>
+                <TouchableOpacity 
+                  style={[styles.button, styles.cancelButton]} 
+                  onPress={() => setShowLoginModal(false)}
+                >
+                  <Text style={styles.buttonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.button, styles.loginButton]} 
+                  onPress={() => navigation.navigate('Auth')}
+                >
+                  <Text style={styles.buttonText}>Go to Sign In</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
-        </TouchableOpacity>
-      </Modal>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  commentContainer: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 10,
+  },
+  replyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  replyButtonText: {
+    color: '#666',
+    fontSize: 13,
+    marginLeft: 4,
+  },
+  viewRepliesButton: {
+    marginTop: 8,
+    padding: 4,
+  },
+  viewRepliesText: {
+    color: '#3498DB',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  repliesContainer: {
+    marginTop: 8,
+    borderLeftWidth: 2,
+    borderLeftColor: '#e1e4e8',
+    paddingLeft: 12,
+  },
+  replyContainer: {
+    backgroundColor: '#f1f3f5',
+    borderRadius: 6,
+    padding: 8,
+    marginTop: 6,
+  },
+  replyingToContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    backgroundColor: '#f8f9fa',
+    borderTopWidth: 1,
+    borderColor: '#eee',
+  },
+  replyingToText: {
+    color: '#666',
+    fontSize: 13,
+    fontStyle: 'italic',
+  },
+  commentInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: '#FFF',
+  },
   container: {
     flex: 1,
     backgroundColor: '#000',

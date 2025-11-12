@@ -50,7 +50,8 @@ export const AuthProvider = ({ children }) => {
         try {
             await AsyncStorage.removeItem('userToken');
             setUserToken(null);
-            router.push('/login');
+            // Only navigate to login if explicitly called from a logout action
+            // Don't redirect automatically when token validation fails
         } catch (error) {
             console.error('Error removing token:', error);
         }
@@ -58,26 +59,25 @@ export const AuthProvider = ({ children }) => {
 
     useEffect(() => {
         const checkToken = async () => {
-            const token = await getToken();
-            if (token) {
-                const isValid = await validateToken(token);
-                if (!isValid) {
-                    await removeToken();
-                    return;
+            try {
+                const token = await getToken();
+                if (token) {
+                    const isValid = await validateToken(token);
+                    if (isValid) {
+                        setUserToken(token);
+                    } else {
+                        // Only remove token if it's invalid, but don't redirect
+                        await AsyncStorage.removeItem('userToken');
+                    }
                 }
-                setUserToken(token);
+            } catch (error) {
+                console.error('Error during token check:', error);
+            } finally {
+                setIsLoading(false);
             }
-            setIsLoading(false);
         };
         checkToken();
     }, []);
-
-    useEffect(() => {
-        if (userToken) {
-            // Redirect to the desired page once the token is set
-            router.push('/'); // Use router.push from expo-router
-        }
-    }, [userToken]); // Runs when userToken changes
 
     return (
         <AuthContext.Provider value={{ userToken, setUserToken: saveToken, removeToken, isLoading }}>
