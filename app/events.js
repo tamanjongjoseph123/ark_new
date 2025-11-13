@@ -42,6 +42,41 @@ export default function Events() {
     return `${BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`
   }
 
+  // Extract YouTube video ID from URL
+  const getYoutubeThumbnail = (url) => {
+    if (!url) return null;
+    
+    // Extract video ID using regex
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    
+    if (match && match[2].length === 11) {
+      return `https://img.youtube.com/vi/${match[2]}/maxresdefault.jpg`;
+    }
+    
+    return null;
+  };
+  
+  // Extract YouTube video ID for navigation
+  const getYoutubeId = (url) => {
+    if (!url) return '';
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : '';
+  };
+  
+  const handleVideoPress = (event) => {
+    if (event.youtube_url) {
+      const videoId = getYoutubeId(event.youtube_url);
+      if (videoId) {
+        router.push({
+          pathname: '/video-details',
+          params: { videoId }
+        });
+      }
+    }
+  };
+
   const fetchEvents = async (status = 'upcoming') => {
     try {
       const response = await fetch(`${BASE_URL}/api/upcoming-events/`)
@@ -139,11 +174,30 @@ export default function Events() {
           </View>
         ) : (
           events.map((event) => (
-            <TouchableOpacity key={event.id} style={styles.eventCard}>
-              <Image source={{ uri: event.image }} style={styles.eventImage} resizeMode="cover" />
+            <TouchableOpacity 
+              key={event.id} 
+              style={styles.eventCard}
+              onPress={activeTab === 'past' && event.youtube_url ? () => handleVideoPress(event) : null}
+            >
+              {activeTab === 'past' && event.youtube_url ? (
+                <View style={styles.videoContainer}>
+                  <Image 
+                    source={{ uri: getYoutubeThumbnail(event.youtube_url) || event.image }} 
+                    style={styles.eventImage} 
+                    resizeMode="cover" 
+                  />
+                  <View style={styles.playButton}>
+                    <Ionicons name="play-circle" size={50} color="#FFF" />
+                  </View>
+                </View>
+              ) : (
+                <Image source={{ uri: event.image }} style={styles.eventImage} resizeMode="cover" />
+              )}
               <View style={styles.eventInfo}>
                 <Text style={styles.eventTitle}>{event.title}</Text>
-                <Text style={styles.eventDescription}>{event.description}</Text>
+                <Text style={styles.eventDescription} numberOfLines={2}>
+                  {event.description}
+                </Text>
                 <Text style={styles.eventDate}>
                   {new Date(event.event_date).toLocaleDateString("en-US", {
                     year: "numeric",
@@ -151,12 +205,19 @@ export default function Events() {
                     day: "numeric",
                   })}
                 </Text>
-                <TouchableOpacity style={styles.registerButton} onPress={() => openRegistrationModal(event)}>
-                  <LinearGradient colors={["#1e67cd", "#4a90e2"]} style={styles.registerButtonGradient}>
-                    <Ionicons name="calendar-outline" size={20} color="#FFF" />
-                    <Text style={styles.registerButtonText}>Register for Event</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
+                {activeTab === 'upcoming' ? (
+                  <TouchableOpacity style={styles.registerButton} onPress={() => openRegistrationModal(event)}>
+                    <LinearGradient colors={["#1e67cd", "#4a90e2"]} style={styles.registerButtonGradient}>
+                      <Ionicons name="calendar-outline" size={20} color="#FFF" />
+                      <Text style={styles.registerButtonText}>Register for Event</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                ) : event.youtube_url ? (
+                  <View style={styles.watchButton}>
+                    <Ionicons name="play-circle" size={20} color="#1e67cd" />
+                    <Text style={styles.watchButtonText}>Watch Video</Text>
+                  </View>
+                ) : null}
               </View>
             </TouchableOpacity>
           ))
@@ -262,11 +323,15 @@ const styles = StyleSheet.create({
   emptyText: { color: "#666" },
 
   eventCard: {
-    backgroundColor: "#FFF",
-    borderRadius: 15,
-    overflow: "hidden",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
     marginBottom: 16,
-    elevation: 3,
+    overflow: "hidden",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   eventImage: { width: "100%", height: 200 },
   eventInfo: { padding: 16 },

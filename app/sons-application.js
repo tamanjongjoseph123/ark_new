@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useContext } from "react"
 import {
   View,
   Text,
@@ -12,15 +12,18 @@ import {
   Modal,
   ActivityIndicator,
   StatusBar,
+  Linking,
 } from "react-native"
 import { LinearGradient } from "expo-linear-gradient"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { BASE_URL } from "./base_url"
 import { login as apiLogin } from "./services/api"
+import { AuthContext } from "./Contexts/AuthContext"
 
 export default function SonsApplication() {
   const router = useRouter()
+  const { setUserToken } = useContext(AuthContext)
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
@@ -397,55 +400,138 @@ export default function SonsApplication() {
                         }
 
                         try {
-                          setLoginLoading(true)
+                          setLoginLoading(true);
                           const res = await apiLogin({
                             username: loginUsername.trim(),
                             password: loginPassword,
-                          })
+                          });
 
                           // Handle successful login
-                          setLoginVisible(false)
-
-                          // Show success message and redirect to courses
-                          Alert.alert(
-                            "Login Successful!", 
-                            "You have successfully logged in to your Sons of John Chi account.",
-                            [
-                              {
-                                text: "Continue",
-                                onPress: () => {
-                                  router.push('/courses')
-                                },
-                              },
-                            ]
-                          )
-
+                          setLoginVisible(false);
+                          
                           // Clear login form
-                          setLoginUsername("")
-                          setLoginPassword("")
-                        } catch (error) {
-                          console.error("Login error:", error)
-                          let errorMessage = "Login failed. Please try again."
+                          setLoginUsername("");
+                          setLoginPassword("");
 
+                          // Store the token in context and AsyncStorage
+                          if (res.access) {
+                            await setUserToken(res.access);
+                            
+                            // Check if we have the user data in the response
+                            if (res.user) {
+                              // User is logged in successfully
+                              // Now check if they have any application status
+                              if (res.application_status === 'pending') {
+                                // User has a pending application
+                                Alert.alert(
+                                  "Application Pending",
+                                  "Your application is still under review. You can still browse the app, but some features may be limited until your application is approved.",
+                                  [
+                                    {
+                                      text: "OK",
+                                      onPress: () => {
+                                        // Redirect to home or dashboard
+                                        router.push('/');
+                                      },
+                                    },
+                                  ]
+                                );
+                              } else if (res.application_status === 'rejected') {
+                                // User's application was rejected
+                                Alert.alert(
+                                  "Application Status",
+                                  "Your application has been rejected. If you believe this is a mistake, please contact support.",
+                                  [
+                                    {
+                                      text: "OK",
+                                      style: "cancel"
+                                    },
+                                    {
+                                      text: "Contact Support",
+                                      onPress: () => {
+                                        // Implement contact support functionality
+                                        // For example: 
+                                        // Linking.openURL('mailto:support@example.com');
+                                        // or
+                                        // router.push('/contact-support');
+                                      }
+                                    }
+                                  ]
+                                );
+                              } else {
+                                // Application is approved or status not specified
+                                // Redirect to the courses page
+                                router.push('/courses');
+                              }
+                            } else {
+                              // No user data in response, but login was successful
+                              // Redirect to the courses page
+                              router.push('/courses');
+                            }
+                          } else {
+                            throw new Error('No access token received from server');
+                          }
+                        } catch (error) {
+                          console.error("Login error:", error);
+                          
+                          // Default error message
+                          let errorMessage = "Login failed. Please try again.";
+                          let showContactSupport = false;
+                          let buttons = [
+                            { 
+                              text: "OK", 
+                              style: "cancel" 
+                            }
+                          ];
+                          
                           // Handle different error formats
                           if (error.response) {
-                            const { data, status } = error.response
-                            if (status === 401) {
-                              errorMessage = "Invalid username or password. Please try again."
-                            } else if (data.detail) {
-                              errorMessage = data.detail
-                            } else if (data.error) {
-                              errorMessage = data.error
-                            } else if (typeof data === 'string') {
-                              errorMessage = data
-                            } else if (typeof data === 'object') {
-                              errorMessage = Object.values(data).flat().join('\n')
+                            const { data, status } = error.response;
+                            
+                            // Use the error message from the server if available
+                            if (data?.error) {
+                              errorMessage = data.error;
+                            } 
+                            // Handle 403 Forbidden (application pending or rejected)
+                            else if (status === 403) {
+                              if (data?.detail) {
+                                errorMessage = data.detail;
+                              }
+                              showContactSupport = true;
                             }
-                          } else if (error.message) {
-                            errorMessage = error.message
+                            // Handle 401 Unauthorized (invalid credentials)
+                            else if (status === 401) {
+                              errorMessage = "Invalid username or password. Please try again.";
+                            }
+                            // Handle other error responses
+                            else if (data?.detail) {
+                              errorMessage = data.detail;
+                            } else if (typeof data === 'string') {
+                              errorMessage = data;
+                            } else if (typeof data === 'object') {
+                              errorMessage = Object.values(data).flat().join('\n');
+                            }
+                          } 
+                          // Handle errors thrown by our API client
+                          else if (error.message) {
+                            errorMessage = error.message;
                           }
-
-                          Alert.alert("Login Failed", errorMessage)
+                          
+                          // Add Contact Support button if needed
+                          if (showContactSupport) {
+                            buttons.push({
+                              text: "Contact Support",
+                              onPress: () => {
+                                // Implement contact support functionality
+                                // For example: 
+                                // Linking.openURL('mailto:support@example.com');
+                                // or
+                                // router.push('/contact-support');
+                              }
+                            });
+                          }
+                          
+                          Alert.alert("Login Failed", errorMessage, buttons);
                         } finally {
                           setLoginLoading(false)
                         }

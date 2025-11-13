@@ -257,6 +257,9 @@ export default function DevotionsScreen() {
               </TouchableOpacity>
             </View>
             <Text style={styles.title}>{today.title}</Text>
+            {today.description && (
+              <Text style={styles.cardDescription}>{today.description}</Text>
+            )}
             {today.content_type === 'text' && (
               <Text style={styles.content}>{today.text_content || today.description}</Text>
             )}
@@ -299,6 +302,9 @@ export default function DevotionsScreen() {
                 </TouchableOpacity>
               </View>
               <Text style={styles.title}>{d.title}</Text>
+              {d.description && (
+                <Text style={styles.cardDescription}>{d.description}</Text>
+              )}
               {d.content_type === 'text' ? (
                 <>
                   <Text style={styles.content}>{isExpanded ? fullText : preview}</Text>

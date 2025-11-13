@@ -41,6 +41,8 @@ export default function MentorshipScreen() {
       return false;
     }
 
+    setLoginLoading(true);
+    
     try {
       const data = await apiLogin({
         username,
@@ -66,10 +68,37 @@ export default function MentorshipScreen() {
       }
     } catch (error) {
       console.error("Login error:", error);
-      Alert.alert(
-        "Login Failed",
-        error.response?.data?.detail || "Invalid username or password"
-      );
+      let errorMessage = "Invalid username or password";
+      
+      // Handle different error response formats
+      if (error.response?.data) {
+        const { data } = error.response;
+        if (data.detail) {
+          errorMessage = data.detail;
+        } else if (data.non_field_errors) {
+          errorMessage = Array.isArray(data.non_field_errors) 
+            ? data.non_field_errors.join(' ') 
+            : String(data.non_field_errors);
+        } else if (data.error) {
+          errorMessage = Array.isArray(data.error) 
+            ? data.error.join(' ') 
+            : String(data.error);
+        } else if (typeof data === 'string') {
+          errorMessage = data;
+        } else if (Object.keys(data).length > 0) {
+          // Handle field-specific errors
+          const fieldErrors = Object.entries(data)
+            .map(([field, errors]) => 
+              `${field}: ${Array.isArray(errors) ? errors.join(' ') : String(errors)}`
+            )
+            .join('\n');
+          errorMessage = fieldErrors || errorMessage;
+        }
+      } else if (error.message && error.message !== 'Request failed with status code 401') {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert("Login Failed", errorMessage);
       return false;
     } finally {
       setLoginLoading(false);

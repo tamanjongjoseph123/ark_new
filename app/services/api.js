@@ -105,9 +105,9 @@ export const submitPrayerRequest = async (data) => {
 };
 
 // Upcoming Events
-export const getEvents = async () => {
+export const getEvents = async (status = 'upcoming') => {
     try {
-        const response = await api.get('/api/upcoming-events/');
+        const response = await api.get(`/api/upcoming-events/?event_status=${status}`);
         return response.data;
     } catch (error) {
         console.error('Error fetching events:', error);
@@ -300,17 +300,83 @@ export const getReplies = async (commentId, token) => {
 // Auth
 export const login = async ({ username, password }) => {
     try {
-        const response = await api.post('/api/applications/login/', { username, password });
+        const response = await api.post('/api/auth/login/', { username, password });
+        
         // Store tokens if needed
         if (response.data.access) {
             // You can store tokens in AsyncStorage or your state management here
             // await AsyncStorage.setItem('authToken', response.data.access);
             // await AsyncStorage.setItem('refreshToken', response.data.refresh);
         }
-        return response.data; // { access, refresh, user, application_type }
+        
+        // Return the full response including user and application status
+        return response.data;
     } catch (error) {
         console.error('Login failed:', error?.response?.data || error?.message);
-        throw error;
+        
+        // If it's already a custom error we created, just rethrow it
+        if (error.status && error.data) {
+            throw error;
+        }
+        
+        // Handle specific HTTP status codes and error messages from the server
+        if (error.response) {
+            const { data, status } = error.response;
+            let errorMessage = 'Login failed. Please try again.';
+            let errorToThrow = new Error(errorMessage);
+            
+            // Attach status and data to the error object
+            errorToThrow.status = status;
+            errorToThrow.data = data;
+            
+            // Try to get the most specific error message
+            if (data) {
+                // Check for common error fields
+                const possibleErrorFields = ['error', 'detail', 'message', 'non_field_errors'];
+                
+                for (const field of possibleErrorFields) {
+                    if (data[field]) {
+                        if (Array.isArray(data[field])) {
+                            errorMessage = data[field][0]; // Take first error if it's an array
+                        } else if (typeof data[field] === 'string') {
+                            errorMessage = data[field];
+                        } else if (typeof data[field] === 'object') {
+                            // Handle nested error objects
+                            const nestedErrors = Object.values(data[field]).flat();
+                            errorMessage = nestedErrors.join(' ');
+                        }
+                        break;
+                    }
+                }
+                
+                // If we didn't find a specific message, try to stringify the data
+                if (errorMessage === 'Login failed. Please try again.') {
+                    try {
+                        const stringified = JSON.stringify(data);
+                        if (stringified !== '{}') {
+                            errorMessage = stringified;
+                        }
+                    } catch (e) {
+                        console.error('Error stringifying error data:', e);
+                    }
+                }
+            }
+            
+            // For 401, use a more user-friendly message
+            if (status === 401) {
+                errorMessage = 'Invalid username or password. Please try again.';
+            }
+            
+            // Update the error message
+            errorToThrow.message = errorMessage;
+            throw errorToThrow;
+        }
+        
+        // For network errors or other unhandled errors
+        const genericError = new Error(error.message || 'Unable to connect to the server. Please check your internet connection and try again.');
+        genericError.status = error.response?.status || 0;
+        genericError.data = error.response?.data;
+        throw genericError;
     }
 };
 

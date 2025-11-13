@@ -26,10 +26,11 @@ interface Stream {
   id: number
   title: string
   description: string
-  stream_type: 'live' | 'regular'
-  youtube_url: string
-  is_active: boolean
-  start_time: string
+  stream_url: string
+  thumbnail_url?: string
+  scheduled_time?: string
+  created_at: string
+  updated_at: string
 }
 
 const LiveStreamScreen = () => {
@@ -37,7 +38,15 @@ const LiveStreamScreen = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const [isStreamPlaying, setIsStreamPlaying] = useState(false)
+  const [isStreamPlaying, setIsStreamPlaying] = useState(false);
+  
+  // Add proper error type handling
+  const handleError = (err: unknown) => {
+    console.error('Error:', err);
+    const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+    setError(errorMessage);
+    setStream(null);
+  };
 
   useEffect(() => {
     fetchActiveStream()
@@ -56,80 +65,47 @@ const LiveStreamScreen = () => {
 
   const fetchActiveStream = async () => {
     try {
-      setLoading(true)
+      setLoading(true);
       
-      // Try different possible endpoints
-      const endpoints = [
-        '/api/streams/active/',
-        '/api/stream/active/',
-        '/streams/active/'
-      ]
-      
-      let response = null
-      let lastError = null
-      
-      // Try each endpoint until one works
-      for (const endpoint of endpoints) {
-        const url = `${BASE_URL}${endpoint}`
-        console.log('Trying endpoint:', url)
-        
-        try {
-          const res = await fetch(url, {
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json'
-            }
-          })
-          
-          const contentType = res.headers.get('content-type');
-          if (contentType && contentType.includes('application/json')) {
-            response = res
-            break
-          }
-        } catch (err) {
-          lastError = err
-          console.log(`Endpoint ${endpoint} failed:`, err.message)
-          continue
+      const response = await fetch(`${BASE_URL}/api/stream/current/`, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+          'Expires': '0'
         }
-      }
-      
-      if (!response) {
-        throw lastError || new Error('Failed to connect to any stream endpoints')
-      }
-      
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text();
-        console.error('Non-JSON response received from:', response.url);
-        console.error('Response start:', text.substring(0, 200));
-        throw new Error('Server returned non-JSON response. Please check the API endpoint.');
-      }
-      
-      const data = await response.json()
-      console.log('Stream API response:', data)
+      });
       
       if (!response.ok) {
-        throw new Error(data.detail || `HTTP error! status: ${response.status}`)
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+      
+      const data = await response.json();
+      console.log('Stream API response:', data);
       
       if (!data || !data.id) {
-        throw new Error('Invalid stream data received')
+        throw new Error('No active stream available');
       }
       
-      if (!data.is_active) {
-        throw new Error('The stream exists but is not marked as active')
+      if (!data.stream_url) {
+        throw new Error('Stream URL is missing');
       }
       
-      setStream(data)
-      setError(null)
-    } catch (err) {
-      console.error('Error details:', {
-        name: err.name,
-        message: err.message,
-        stack: err.stack
-      });
-      setError(err.message || 'No live stream is currently active. Please check the stream URL and try again.')
-      setStream(null)
+      setStream(data);
+      setError(null);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error('Error details:', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        });
+        setError(error.message || 'No live stream is currently active. Please check the stream URL and try again.');
+      } else {
+        setError('An unknown error occurred while fetching the stream');
+      }
+      setStream(null);
     } finally {
       setLoading(false)
     }
@@ -137,9 +113,22 @@ const LiveStreamScreen = () => {
 
   const extractVideoId = (url: string) => {
     if (!url) return null;
-    const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/
-    const match = url.match(regExp)
-    return (match && match[7]?.length === 11) ? match[7] : null
+    
+    // Handle YouTube URLs
+    if (url.includes('youtube.com') || url.includes('youtu.be')) {
+      const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
+      const match = url.match(regExp);
+      return (match && match[7]?.length === 11) ? match[7] : null;
+    }
+    
+    // Handle Vimeo URLs
+    if (url.includes('vimeo.com')) {
+      const regExp = /(?:vimeo\.com\/|player\.vimeo\.com\/video\/)(\d+)/;
+      const match = url.match(regExp);
+      return match ? match[1] : null;
+    }
+    
+    return null;
   }
 
   const createHtmlContent = (videoId: string) => `
@@ -304,10 +293,28 @@ const LiveStreamScreen = () => {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3498DB" />
-        <Text style={styles.loadingText}>Loading stream...</Text>
+        <ActivityIndicator size="large" color="#1e67cd" />
+        <Text style={styles.loadingText}>Checking for live streams...</Text>
       </View>
     )
+  }
+
+  if (!stream) {
+    return (
+      <View style={styles.errorContainer}>
+        <Ionicons name="tv-outline" size={60} color="#888" />
+        <Text style={styles.errorTitle}>No Stream Available</Text>
+        <Text style={styles.errorText}>
+          {error || 'There is no stream available at the moment. Please check back later.'}
+        </Text>
+        <TouchableWithoutFeedback onPress={fetchActiveStream}>
+          <View style={styles.retryButton}>
+            <Ionicons name="refresh" size={16} color="#fff" style={{ marginRight: 8 }} />
+            <Text style={styles.retryButtonText}>Refresh</Text>
+          </View>
+        </TouchableWithoutFeedback>
+      </View>
+    );
   }
 
   return (
@@ -317,77 +324,62 @@ const LiveStreamScreen = () => {
         <Text style={styles.headerTitle}>Live Stream</Text>
       </View>
 
-      {error ? (
-        <View style={styles.errorContainer}>
-          <Ionicons name="sad-outline" size={60} color="#666" />
-          <Text style={styles.errorText}>{error}</Text>
-          <Text style={styles.errorSubtext}>Please check back later for upcoming streams.</Text>
-        </View>
-      ) : stream ? (
-        <>
-          {/* Video Player */}
-          <View style={styles.videoContainer}>
-            <TouchableWithoutFeedback>
-              <View style={styles.touchBlock}>
-                <WebView
-              style={styles.video}
-              javaScriptEnabled={true}
-              domStorageEnabled={true}
-              source={{
-                html: createHtmlContent(extractVideoId(stream.youtube_url) || ''),
-                baseUrl: 'https://app.local'
-              }}
-              allowsFullscreenVideo={true}
-              allowsInlineMediaPlayback={true}
-              startInLoadingState={true}
-              mediaPlaybackRequiresUserAction={false}
-              mixedContentMode="always"
-              onMessage={(event) => {
-                const message = event.nativeEvent.data;
-                console.log('WebView message:', message);
-                if (message.startsWith('player_error')) {
-                  const errorCode = message.split(':')[1];
-                  console.error('YouTube Player Error:', errorCode);
-                  setIsStreamPlaying(false);
-                } else if (message === 'player_playing') {
-                  setIsStreamPlaying(true);
-                }
-              }}
-              renderLoading={() => (
-                <View style={styles.loadingVideo}>
-                  <ActivityIndicator size="large" color="#3498DB" />
-                  <Text style={styles.loadingText}>Loading stream...</Text>
-                </View>
-              )}
-            />
+      {/* Video Player */}
+      <View style={styles.videoContainer}>
+        <WebView
+          source={{ 
+            html: createHtmlContent(extractVideoId(stream.stream_url) || ''),
+            baseUrl: 'https://app.local'
+          }}
+          style={styles.video}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          allowsFullscreenVideo={true}
+          allowsInlineMediaPlayback={true}
+          startInLoadingState={true}
+          mediaPlaybackRequiresUserAction={false}
+          mixedContentMode="always"
+          onMessage={(event) => {
+            const message = event.nativeEvent.data;
+            console.log('WebView message:', message);
+            if (message.startsWith('player_error')) {
+              const errorCode = message.split(':')[1];
+              console.error('Player Error:', errorCode);
+              setIsStreamPlaying(false);
+            } else if (message === 'player_playing') {
+              setIsStreamPlaying(true);
+            }
+          }}
+          renderLoading={() => (
+            <View style={styles.loadingVideo}>
+              <ActivityIndicator size="large" color="#3498DB" />
+              <Text style={styles.loadingText}>Loading stream...</Text>
             </View>
-            </TouchableWithoutFeedback>
-          </View>
+          )}
+        />
+      </View>
 
-          {/* Stream Info */}
-          <View style={styles.infoContainer}>
-            <Text style={styles.streamTitle}>{stream.title}</Text>
-            <Text style={styles.streamDescription}>
-              {stream.description || 'Join us for this live stream.'}
+      {/* Stream Info */}
+      <View style={styles.infoContainer}>
+        <Text style={styles.streamTitle}>{stream.title}</Text>
+        <Text style={styles.streamDescription}>
+          {stream.description || 'Join us for this live stream.'}
+        </Text>
+        <View style={styles.statsContainer}>
+          <View style={styles.statItem}>
+            <Ionicons name="time" size={20} color="#666" />
+            <Text style={styles.statText}>
+              {new Date(stream.updated_at).toLocaleString()}
             </Text>
-            <View style={styles.statsContainer}>
-              <View style={styles.statItem}>
-                <Ionicons name="time" size={20} color="#666" />
-                <Text style={styles.statText}>
-                  {new Date(stream.start_time).toLocaleString()}
-                </Text>
-              </View>
-              <View style={[styles.statItem, { backgroundColor: '#FF3B30' }]} >
-                <Ionicons name="radio" size={16} color="white" />
-                <Text style={[styles.statText, { color: 'white' }]}>
-                  {stream.stream_type === 'live' ? 'Live Now' : 'Video'}
-                </Text>
-              </View>
-            </View>
           </View>
-        </>
-      ) : null}
-
+          <View style={[styles.statItem, { backgroundColor: '#FF3B30' }]}>
+            <Ionicons name="radio" size={16} color="white" />
+            <Text style={[styles.statText, { color: 'white' }]}>
+              Live Now
+            </Text>
+          </View>
+        </View>
+      </View>
     </SafeAreaView>
   )
 }
@@ -421,12 +413,35 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: '#FFFFFF',
   },
-  errorText: {
+  errorTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#333333',
     marginTop: 16,
     textAlign: 'center',
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#666666',
+    marginTop: 8,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    backgroundColor: '#1e67cd',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 16,
   },
   errorSubtext: {
     fontSize: 14,

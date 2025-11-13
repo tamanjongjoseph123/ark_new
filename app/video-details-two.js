@@ -43,30 +43,65 @@ export default function VideoDetail() {
   useEffect(() => {
     let mounted = true;
     const load = async () => {
-      if (!courseVideoId) return;
+      if (!courseVideoId) {
+        setComments([]);
+        return;
+      }
+      
       setDetailsLoading(true);
       setCommentsLoading(true);
+      setComments([]); // Clear previous comments
+      
       try {
         const [video, cmts] = await Promise.all([
           getCourseVideo(courseVideoId).catch((e) => {
-            setDetailsError('Failed to load details');
+            console.error('Error loading video details:', e);
+            setDetailsError('Failed to load video details');
             return null;
           }),
-          listComments(courseVideoId).catch(() => []),
+          listComments(courseVideoId).catch((e) => {
+            console.error('Error loading comments:', e);
+            return [];
+          }),
         ]);
+        
         if (!mounted) return;
+        
+        // Only update state if we have valid data
         if (video) {
           setKeyTakeaways(video.key_takeaways || '');
           setAssignments(video.assignments || '');
         }
-        setComments(Array.isArray(cmts) ? cmts : []);
+        
+        // Ensure we only set comments if they're for this video
+        if (Array.isArray(cmts)) {
+          // Filter comments to ensure they belong to this video (if video_id is available in comment object)
+          const videoComments = cmts.filter(comment => 
+            !comment.video || comment.video.toString() === courseVideoId.toString()
+          );
+          setComments(videoComments);
+        } else {
+          setComments([]);
+        }
+      } catch (error) {
+        console.error('Error in loading data:', error);
+        setDetailsError('Failed to load data');
+        setComments([]);
       } finally {
-        setDetailsLoading(false);
-        setCommentsLoading(false);
+        if (mounted) {
+          setDetailsLoading(false);
+          setCommentsLoading(false);
+        }
       }
     };
+    
     load();
-    return () => { mounted = false; };
+    
+    return () => { 
+      mounted = false; 
+      // Cleanup any pending operations
+      setComments([]);
+    };
   }, [courseVideoId]);
 
   const handleSendComment = async () => {
