@@ -24,7 +24,10 @@ export default function Projects() {
         throw new Error('Failed to fetch projects');
       }
       const data = await response.json();
-      setProjects(data);
+      
+      // Handle paginated response
+      const results = Array.isArray(data) ? data : (data.results || []);
+      setProjects(results);
     } catch (err) {
       setError(err.message);
     } finally {

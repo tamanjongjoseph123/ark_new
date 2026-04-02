@@ -86,8 +86,9 @@ export default function SplashScreenSequence({ onComplete, onDataLoaded }: Splas
           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
         };
 
-        // Safe slice function that handles potential null/undefined arrays
-        const safeSlice = (arr: any[], count: number) => {
+        // Safe slice function that handles potential null/undefined/paginated arrays
+        const safeSlice = (data: any, count: number) => {
+          const arr = Array.isArray(data) ? data : (data?.results || []);
           if (!arr || !Array.isArray(arr)) return [];
           return arr.sort(safeSortByDate).slice(0, count);
         };
@@ -131,17 +132,26 @@ export default function SplashScreenSequence({ onComplete, onDataLoaded }: Splas
     loadData();
   }, []);
 
+  const [timerFinished, setTimerFinished] = useState(false);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       if (currentScreen === 0) {
         setCurrentScreen(1);
       } else {
-        onComplete();
+        setTimerFinished(true);
       }
     }, SPLASH_DURATION);
 
     return () => clearTimeout(timer);
-  }, [currentScreen, onComplete]);
+  }, [currentScreen]);
+
+  // Only complete the splash sequence when both the timer is done AND data is loaded
+  useEffect(() => {
+    if (timerFinished && !isLoading) {
+      onComplete();
+    }
+  }, [timerFinished, isLoading, onComplete]);
 
   if (currentScreen === 0) {
     return (

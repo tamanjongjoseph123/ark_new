@@ -30,7 +30,10 @@ export default function Deliverance() {
         throw new Error('Failed to fetch videos');
       }
       const data = await response.json();
-      setVideos(data);
+      
+      // Handle paginated response
+      const results = Array.isArray(data) ? data : (data.results || []);
+      setVideos(results);
     } catch (err) {
       setError(err.message);
     } finally {

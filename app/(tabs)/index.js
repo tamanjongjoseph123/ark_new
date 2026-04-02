@@ -6,36 +6,37 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 
 const useData = () => {
-  const [isLoading, setIsLoading] = useState(true);
-  const [data, setData] = useState({
-    prophecies: [],
-    crusades: [],
-    testimonies: [],
-    healings: [],
-    prayers: [],
-    massPrayers: [],
-    deliverance: [],
-    charities: [],
-    quotes: [],
-    events: [],
-    projects: []
+  // Synchronously initialize state with preloaded data if available
+  const [isLoading, setIsLoading] = useState(!global.__PRELOADED_DATA__);
+  const [data, setData] = useState(() => {
+    if (global.__PRELOADED_DATA__) {
+      return global.__PRELOADED_DATA__;
+    }
+    return {
+      prophecies: [],
+      crusades: [],
+      testimonies: [],
+      healings: [],
+      prayers: [],
+      massPrayers: [],
+      deliverance: [],
+      charities: [],
+      quotes: [],
+      events: [],
+      projects: []
+    };
   });
 
   useEffect(() => {
     const fetchData = async () => {
+      // If we initialized with preloaded data, just clear the cache and skip fetch
+      if (global.__PRELOADED_DATA__) {
+        global.__PRELOADED_DATA__ = null;
+        return;
+      }
+
       try {
         setIsLoading(true);
-        
-        // Check if we have preloaded data
-        if (global.__PRELOADED_DATA__) {
-          setData(global.__PRELOADED_DATA__);
-          setIsLoading(false);
-          // Clear the preloaded data after using it
-          global.__PRELOADED_DATA__ = null;
-          return;
-        }
-
-        // If no preloaded data, fetch normally
         const [
           prophecies,
           crusades,
@@ -62,21 +63,24 @@ const useData = () => {
           getProjects()
         ]);
 
+        // Extract results array in case of paginated responses
+        const extractArray = (res) => Array.isArray(res) ? res : (res?.results || []);
+
         // Sort and get the two most recent items for each category
         const sortByDate = (a, b) => new Date(b.created_at) - new Date(a.created_at);
         
         setData({
-          prophecies: prophecies.sort(sortByDate).slice(0, 5),
-          crusades: crusades.sort(sortByDate).slice(0, 5),
-          testimonies: testimonies.sort(sortByDate).slice(0, 5),
-          healings: healings.sort(sortByDate).slice(0, 5),
-          prayers: prayers.sort(sortByDate).slice(0, 5),
-          massPrayers: massPrayers.sort(sortByDate).slice(0, 5),
-          deliverance: deliverance.sort(sortByDate).slice(0, 5),
-          charities: charities.sort(sortByDate).slice(0, 2),
-          quotes: quotes.sort(sortByDate).slice(0, 2),
-          events: events.sort(sortByDate).slice(0, 2),
-          projects: projects.sort(sortByDate).slice(0, 2)
+          prophecies: extractArray(prophecies).sort(sortByDate).slice(0, 5),
+          crusades: extractArray(crusades).sort(sortByDate).slice(0, 5),
+          testimonies: extractArray(testimonies).sort(sortByDate).slice(0, 5),
+          healings: extractArray(healings).sort(sortByDate).slice(0, 5),
+          prayers: extractArray(prayers).sort(sortByDate).slice(0, 5),
+          massPrayers: extractArray(massPrayers).sort(sortByDate).slice(0, 5),
+          deliverance: extractArray(deliverance).sort(sortByDate).slice(0, 5),
+          charities: extractArray(charities).sort(sortByDate).slice(0, 2),
+          quotes: extractArray(quotes).sort(sortByDate).slice(0, 2),
+          events: extractArray(events).sort(sortByDate).slice(0, 2),
+          projects: extractArray(projects).sort(sortByDate).slice(0, 2)
         });
       } catch (error) {
         console.error('Error fetching data:', error);

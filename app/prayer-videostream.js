@@ -233,11 +233,14 @@ export default function PrayerVideoStream() {
         const data = await response.json();
         console.log('Prayer room data:', data);
         
-        if (!data.is_active) {
+        // Handle potential paginated response
+        const roomData = Array.isArray(data) ? data[0] : (data.results ? data.results[0] : data);
+        
+        if (!roomData || !roomData.is_active) {
           throw new Error('No active prayer session at the moment');
         }
         
-        setPrayerRoom(data);
+        setPrayerRoom(roomData);
         setError(null);
       } catch (err) {
         console.error('Error fetching prayer room:', err);

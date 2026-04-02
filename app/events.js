@@ -82,18 +82,23 @@ export default function Events() {
       const response = await fetch(`${BASE_URL}/api/upcoming-events/`)
       if (!response.ok) throw new Error("Failed to fetch events")
       let data = await response.json()
+      
+      // Handle paginated response
+      const eventList = Array.isArray(data) ? data : (data.results || [])
+      
+      let filteredData = []
       if (status === 'upcoming') {
-        data = data.filter((e) => (e.event_status || '').toLowerCase() === 'upcoming')
+        filteredData = eventList.filter((e) => (e.event_status || '').toLowerCase() === 'upcoming')
         // soonest first
-        data.sort((a,b) => new Date(a.event_date) - new Date(b.event_date))
+        filteredData.sort((a,b) => new Date(a.event_date) - new Date(b.event_date))
       } else {
-        data = data.filter((e) => (e.event_status || '').toLowerCase() === 'past')
+        filteredData = eventList.filter((e) => (e.event_status || '').toLowerCase() === 'past')
         // most recent past first
-        data.sort((a,b) => new Date(b.event_date) - new Date(a.event_date))
+        filteredData.sort((a,b) => new Date(b.event_date) - new Date(a.event_date))
       }
       // normalize image
-      data = data.map(e => ({ ...e, image: toImageUrl(e.image) }))
-      setEvents(data)
+      const processedData = filteredData.map(e => ({ ...e, image: toImageUrl(e.image) }))
+      setEvents(processedData)
     } catch (err) {
       setError(err.message)
     } finally {

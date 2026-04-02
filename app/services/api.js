@@ -7,8 +7,8 @@ const api = axios.create({
     headers: {
         'Content-Type': 'application/json',
     },
-    // Add timeout to prevent hanging requests
-    timeout: 10000,
+    // Add timeout to prevent hanging requests (increased to 60s for Render cold start)
+    timeout: 60000,
 });
 
 // Video related endpoints
@@ -16,7 +16,7 @@ export const getVideos = async (category = null) => {
     try {
         const url = category ? `/api/videos/by_category/?category=${category}` : '/api/videos/';
         const response = await api.get(url);
-        return response.data;
+        return Array.isArray(response.data) ? response.data : (response.data.results || []);
     } catch (error) {
         console.error(`Error fetching videos${category ? ' for ' + category : ''}:`, error);
         // Return empty array instead of throwing to prevent app crashes
@@ -65,7 +65,7 @@ export const getDevotion = async (id) => {
 export const getPraiseVideos = async () => {
     try {
         const response = await api.get('/api/videos/by_category/?category=praise');
-        return response.data;
+        return Array.isArray(response.data) ? response.data : (response.data.results || []);
     } catch (error) {
         console.error('Error fetching praise videos:', error);
         return [];
@@ -75,7 +75,7 @@ export const getPraiseVideos = async () => {
 export const getWorshipVideos = async () => {
     try {
         const response = await api.get('/api/videos/by_category/?category=worship');
-        return response.data;
+        return Array.isArray(response.data) ? response.data : (response.data.results || []);
     } catch (error) {
         console.error('Error fetching worship videos:', error);
         return [];
@@ -86,7 +86,7 @@ export const getWorshipVideos = async () => {
 export const getQuotes = async () => {
     try {
         const response = await api.get('/api/inspiration-quotes/');
-        return response.data;
+        return Array.isArray(response.data) ? response.data : (response.data.results || []);
     } catch (error) {
         console.error('Error fetching quotes:', error);
         return [];
@@ -108,7 +108,7 @@ export const submitPrayerRequest = async (data) => {
 export const getEvents = async (status = 'upcoming') => {
     try {
         const response = await api.get(`/api/upcoming-events/?event_status=${status}`);
-        return response.data;
+        return Array.isArray(response.data) ? response.data : (response.data.results || []);
     } catch (error) {
         console.error('Error fetching events:', error);
         return [];
@@ -119,7 +119,7 @@ export const getEvents = async (status = 'upcoming') => {
 export const getProjects = async () => {
     try {
         const response = await api.get('/api/church-projects/');
-        return response.data;
+        return Array.isArray(response.data) ? response.data : (response.data.results || []);
     } catch (error) {
         console.error('Error fetching projects:', error);
         return [];
@@ -130,7 +130,7 @@ export const getProjects = async () => {
 export const getTestimonies = async () => {
     try {
         const response = await api.get('/api/testimonies/');
-        return response.data;
+        return Array.isArray(response.data) ? response.data : (response.data.results || []);
     } catch (error) {
         console.error('Error fetching testimonies:', error);
         return [];

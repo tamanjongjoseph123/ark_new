@@ -34,7 +34,10 @@ export default function QuotesScreen() {
       
       const data = await response.json();
       console.log('Successfully fetched quotes:', data);
-      setQuotes(data);
+      
+      // Handle paginated response
+      const results = Array.isArray(data) ? data : (data.results || []);
+      setQuotes(results);
     } catch (err) {
       console.error('Error in fetchQuotes:', err);
       console.error('Error details:', {

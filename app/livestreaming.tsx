@@ -84,15 +84,18 @@ const LiveStreamScreen = () => {
       const data = await response.json();
       console.log('Stream API response:', data);
       
-      if (!data || !data.id) {
+      // Handle potential paginated response
+      const streamData = Array.isArray(data) ? data[0] : (data.results ? data.results[0] : data);
+      
+      if (!streamData || !streamData.id) {
         throw new Error('No active stream available');
       }
       
-      if (!data.stream_url) {
+      if (!streamData.stream_url) {
         throw new Error('Stream URL is missing');
       }
       
-      setStream(data);
+      setStream(streamData);
       setError(null);
     } catch (error: unknown) {
       if (error instanceof Error) {

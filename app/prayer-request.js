@@ -42,7 +42,10 @@ export default function PrayerRequest() {
       console.log('📡 Prayer room response status:', response.status);
       const data = await response.json();
       console.log('📋 Prayer room data:', data);
-      setPrayerRoom(data);
+      
+      // Handle potential paginated response
+      const roomData = Array.isArray(data) ? data[0] : (data.results ? data.results[0] : data);
+      setPrayerRoom(roomData);
       
       // Log video URL and extracted ID
       if (data?.youtube_url) {
