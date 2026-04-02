@@ -4,19 +4,37 @@ import { Ionicons } from '@expo/vector-icons';
 import WebView from 'react-native-webview';
 import { StatusBar } from 'expo-status-bar';
 import { Linking, Alert } from 'react-native';
-import React, { useState, useRef, useEffect, useContext } from 'react';
+import React, { useState, useRef, useEffect, useContext, useCallback } from 'react';
 import { getCourseVideo, listComments, postComment, postReply, getReplies } from './services/api';
 import { AuthContext } from './Contexts/AuthContext';
+import { BASE_URL } from './base_url';
 
 export default function VideoDetail() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { videoId, title, youtubeUrl, courseVideoId } = params;
+
+  // Determine video type for the translations API
+  const videoType = courseVideoId ? 'coursevideo' : 'video';
+  const translationVideoId = courseVideoId || videoId;
+
+  // Extract the YouTube video ID from the original URL  
+  const extractYouTubeId = (url) => {
+    if (!url) return null;
+    const match = url.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);
+    return match ? match[1] : url;
+  };
+
+  const originalVideoId = videoId || extractYouTubeId(youtubeUrl);
+
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('keyTakeaways');
   const [showLanguageModal, setShowLanguageModal] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState('English');
+  const [selectedLanguage, setSelectedLanguage] = useState('Original');
+  const [currentVideoId, setCurrentVideoId] = useState(originalVideoId);
+  const [translations, setTranslations] = useState([]);
+  const [translationsLoading, setTranslationsLoading] = useState(false);
   const webViewRef = useRef(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsError, setDetailsError] = useState(null);
@@ -37,7 +55,34 @@ export default function VideoDetail() {
   useEffect(() => {
     setIsLoading(true);
     setError(null);
+    setCurrentVideoId(originalVideoId);
+    setSelectedLanguage('Original');
   }, [videoId, youtubeUrl]);
+
+  // Fetch available translations from the backend
+  useEffect(() => {
+    if (!translationVideoId) return;
+    let mounted = true;
+    const fetchTranslations = async () => {
+      setTranslationsLoading(true);
+      try {
+        const res = await fetch(
+          `${BASE_URL}/api/video-translations/by_video/?video_type=${videoType}&video_id=${translationVideoId}`
+        );
+        if (!res.ok) throw new Error('Failed to fetch translations');
+        const data = await res.json();
+        if (mounted && Array.isArray(data)) {
+          setTranslations(data);
+        }
+      } catch (e) {
+        console.error('Error fetching translations:', e);
+      } finally {
+        if (mounted) setTranslationsLoading(false);
+      }
+    };
+    fetchTranslations();
+    return () => { mounted = false; };
+  }, [translationVideoId, videoType]);
 
   // Load video details and comments
   useEffect(() => {
@@ -208,17 +253,21 @@ export default function VideoDetail() {
     router.push('/login');
   };
 
-  // Language options with their corresponding stream URLs
-  const languages = [
-    { name: 'English', code: 'en', streamUrl: 'https://www.youtube.com/embed/-VJKbieTmKA' },
-    { name: 'French', code: 'fr', streamUrl: 'https://www.youtube.com/embed/-VJKbieTmKA' },
-    { name: 'Chinese', code: 'zh', streamUrl: 'https://www.youtube.com/embed/-VJKbieTmKA' },
-    { name: 'Spanish', code: 'es', streamUrl: 'https://www.youtube.com/embed/-VJKbieTmKA' },
-    { name: 'German', code: 'de', streamUrl: 'https://www.youtube.com/embed/-VJKbieTmKA' }
+  // Language options: Original + all translations fetched from API
+  const languageOptions = [
+    { name: 'Original', code: 'original', videoId: originalVideoId },
+    ...translations.map((t) => ({
+      name: t.language_display || t.language,
+      code: t.language,
+      videoId: extractYouTubeId(t.translated_video_url) || t.translated_video_url,
+    })),
   ];
 
-  const handleLanguageSelect = (language) => {
-    setSelectedLanguage(language.name);
+  const handleLanguageSelect = (option) => {
+    setSelectedLanguage(option.name);
+    setCurrentVideoId(option.videoId);
+    setIsLoading(true);
+    setError(null);
     setShowLanguageModal(false);
   };
 
@@ -273,7 +322,7 @@ export default function VideoDetail() {
             player = new YT.Player('player', {
               height: '100%',
               width: '100%',
-              videoId: '${videoId}',
+              videoId: '${currentVideoId}',
               host: currentHost,
               playerVars: {
                 'autoplay': 1,
@@ -303,7 +352,7 @@ export default function VideoDetail() {
             var container = document.getElementById('player');
             var iframe = document.createElement('iframe');
             var params = 'autoplay=1&playsinline=1&modestbranding=1&rel=0&controls=1';
-            iframe.src = 'https://www.youtube.com/embed/${videoId}?' + params;
+            iframe.src = 'https://www.youtube.com/embed/${currentVideoId}?' + params;
             iframe.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
             iframe.style.width = '100%';
             iframe.style.height = '100%';
@@ -422,7 +471,7 @@ export default function VideoDetail() {
           </View>
         )}
         <WebView
-          key={(videoId || youtubeUrl || '').toString()}
+          key={(currentVideoId || videoId || youtubeUrl || '').toString() + selectedLanguage}
           ref={webViewRef}
           style={styles.video}
           javaScriptEnabled={true}
@@ -630,29 +679,60 @@ export default function VideoDetail() {
           onPress={() => setShowLanguageModal(false)}
         >
           <View style={styles.languageModal}>
-            <Text style={styles.languageModalTitle}>Select Language</Text>
-            {languages.map((language) => (
-      <TouchableOpacity 
-                key={language.code}
-                style={[
-                  styles.languageOption,
-                  selectedLanguage === language.name && styles.languageOptionSelected
-                ]}
-                onPress={() => handleLanguageSelect(language)}
-              >
-                <Text style={[
-                  styles.languageOptionText,
-                  selectedLanguage === language.name && styles.languageOptionTextSelected
-                ]}>
-                  {language.name}
-                </Text>
-                {selectedLanguage === language.name && (
-                  <Ionicons name="checkmark" size={20} color="#3498DB" />
-                )}
-              </TouchableOpacity>
-            ))}
+            <View style={styles.languageModalHeader}>
+              <Ionicons name="language" size={22} color="#3498DB" />
+              <Text style={styles.languageModalTitle}>Select Language</Text>
+            </View>
+
+            {translationsLoading ? (
+              <View style={styles.translationsLoadingContainer}>
+                <ActivityIndicator size="small" color="#3498DB" />
+                <Text style={styles.translationsLoadingText}>Loading languages...</Text>
+              </View>
+            ) : languageOptions.length <= 1 ? (
+              <View style={styles.noTranslationsContainer}>
+                <Ionicons name="information-circle-outline" size={32} color="#ccc" />
+                <Text style={styles.noTranslationsText}>No translations available for this video.</Text>
+                {/* Still show the Original option */}
+                <TouchableOpacity
+                  style={[styles.languageOption, selectedLanguage === 'Original' && styles.languageOptionSelected, { marginTop: 10, width: '100%' }]}
+                  onPress={() => handleLanguageSelect(languageOptions[0])}
+                >
+                  <Text style={[styles.languageOptionText, selectedLanguage === 'Original' && styles.languageOptionTextSelected]}>
+                    Original
+                  </Text>
+                  {selectedLanguage === 'Original' && (
+                    <Ionicons name="checkmark" size={20} color="#3498DB" />
+                  )}
+                </TouchableOpacity>
+              </View>
+            ) : (
+              languageOptions.map((option) => (
+                <TouchableOpacity
+                  key={option.code}
+                  style={[
+                    styles.languageOption,
+                    selectedLanguage === option.name && styles.languageOptionSelected
+                  ]}
+                  onPress={() => handleLanguageSelect(option)}
+                >
+                  <View style={styles.languageOptionLeft}>
+                    <Text style={styles.languageOptionCode}>{option.code === 'original' ? '🌐' : option.code.toUpperCase()}</Text>
+                    <Text style={[
+                      styles.languageOptionText,
+                      selectedLanguage === option.name && styles.languageOptionTextSelected
+                    ]}>
+                      {option.name}
+                    </Text>
+                  </View>
+                  {selectedLanguage === option.name && (
+                    <Ionicons name="checkmark-circle" size={22} color="#3498DB" />
+                  )}
+                </TouchableOpacity>
+              ))
+            )}
           </View>
-      </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
 
       {/* Login Modal for commenting */}
@@ -930,51 +1010,88 @@ const styles = StyleSheet.create({
   // Language Modal Styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   languageModal: {
     backgroundColor: '#FFF',
-    borderRadius: 15,
+    borderRadius: 18,
     padding: 20,
-    width: '80%',
-    maxWidth: 300,
-    elevation: 10,
+    width: '85%',
+    maxWidth: 340,
+    elevation: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
-    shadowRadius: 10,
+    shadowRadius: 12,
+  },
+  languageModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 18,
   },
   languageModalTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#333',
-    marginBottom: 20,
+    color: '#1A1A2E',
+  },
+  translationsLoadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    gap: 10,
+  },
+  translationsLoadingText: {
+    color: '#888',
+    fontSize: 14,
+  },
+  noTranslationsContainer: {
+    alignItems: 'center',
+    paddingVertical: 10,
+    gap: 8,
+  },
+  noTranslationsText: {
+    color: '#aaa',
+    fontSize: 14,
     textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 4,
   },
   languageOption: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 15,
-    paddingHorizontal: 15,
-    borderRadius: 10,
-    marginBottom: 10,
-    backgroundColor: '#F8F9FA',
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: '#F5F7FA',
   },
   languageOptionSelected: {
     backgroundColor: '#EBF3FD',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#3498DB',
   },
+  languageOptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  languageOptionCode: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#3498DB',
+    width: 30,
+  },
   languageOptionText: {
-    fontSize: 16,
-    color: '#333',
+    fontSize: 15,
+    color: '#2C3E50',
     fontWeight: '500',
   },
   languageOptionTextSelected: {
     color: '#3498DB',
-    fontWeight: '600',
+    fontWeight: '700',
   },
 });
