@@ -7,7 +7,6 @@ import { useRouter, useFocusEffect } from "expo-router"
 import { listDevotions, getTodayDevotion } from "../services/api"
 import { registerForPushNotifications, registerDeviceToken } from "../utils/notifications"
 import * as Notifications from 'expo-notifications';
-import { Subscription } from 'expo-modules-core';
 import { useNewDevotion } from "../context/NewDevotionContext";
 
 type ApiDevotion = {
@@ -29,8 +28,8 @@ export default function DevotionsScreen() {
   const [devotions, setDevotions] = useState<ApiDevotion[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const notificationListener = useRef<Subscription>();
-  const responseListener = useRef<Subscription>();
+  const notificationListener = useRef<Notifications.Subscription>();
+  const responseListener = useRef<Notifications.Subscription>();
   const { setHasNewDevotion } = useNewDevotion();
 
   const youTubeId = (url: string = "") => {
@@ -207,7 +206,7 @@ export default function DevotionsScreen() {
     return id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : undefined
   }
 
-  const shareDevotional = (devotion: Devotion) => {
+  const shareDevotional = (devotion: any) => {
     Alert.alert("Share", `Sharing: ${devotion.title}`)
   }
 
@@ -279,7 +278,7 @@ export default function DevotionsScreen() {
 
         {!loading && !error && !today && devotions.length === 0 && (
           <View style={{ padding: 20, alignItems: 'center' }}>
-            <Text style={{ color: '#333', fontSize: 16, fontWeight: '600', marginBottom: 6 }}>No devotions available</Text>
+            <Text style={{ color: '#333', fontSize: 16, fontWeight: '600', marginBottom: 6 }}>No Devotion</Text>
             <Text style={{ color: '#666', textAlign: 'center', marginBottom: 12 }}>Please check back later or tap retry.</Text>
             <TouchableOpacity onPress={loadDevotions} style={styles.videoButton}>
               <Text style={styles.videoButtonText}>Retry</Text>
@@ -428,6 +427,12 @@ const styles = StyleSheet.create({
     color: "#1e67cd",
     fontWeight: "600",
     marginLeft: 8,
+  },
+  cardDescription: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 10,
+    fontStyle: "italic",
   },
   content: {
     fontSize: 16,

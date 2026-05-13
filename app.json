@@ -5,18 +5,19 @@
     "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/ark.png",
+    "scheme": "myapp",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+
     "splash": {
       "image": "./assets/images/ark.png",
-      "imageWidth": 200,
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "scheme": "myapp",
-    "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
+
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.jfsn.arkofgod",
+      "bundleIdentifier": "com.arkofgod.tv",
       "buildNumber": "1",
       "infoPlist": {
         "NSAppTransportSecurity": {
@@ -29,8 +30,9 @@
         "UIBackgroundModes": ["remote-notification"]
       }
     },
+
     "android": {
-      "package": "com.jfsn.arkofgod",
+      "package": "com.arkofgod.tv",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
@@ -44,13 +46,16 @@
       },
       "googleServicesFile": "./google-services.json"
     },
+
     "web": {
       "bundler": "metro",
       "favicon": "./assets/images/ark.png"
     },
+
     "plugins": [
       "expo-router",
       "expo-font",
+
       [
         "expo-image-picker",
         {
@@ -58,40 +63,25 @@
           "cameraPermission": "The app needs access to your camera to record videos for testimonies."
         }
       ],
-      "expo-av",
-      [
-        "react-native-video",
-        {
-          "androidExoPlayerVersion": "2.19.1"
-        }
-      ],
+
       "expo-video",
+
       [
         "expo-notifications",
         {
           "icon": "./assets/images/notification-icon.png",
           "color": "#ffffff",
-          "sounds": [],
-          "mode": "production",
-          "android": {
-            "icon": "./assets/images/notification-icon.png",
-            "adaptiveIcon": {
-              "foregroundImage": "./assets/images/ark.png",
-              "backgroundColor": "#ffffff"
-            },
-            "googleServicesEnabled": true,
-            "useNextNotificationsApi": true
-          },
-          "ios": {
-            "useProvisionalNotifications": false
-          }
+          "sounds": []
         }
       ]
     ],
+
     "experiments": {
       "typedRoutes": true
     },
+
     "owner": "halaxoft",
+
     "extra": {
       "router": {
         "origin": false
