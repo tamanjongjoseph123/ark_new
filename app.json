@@ -24,7 +24,6 @@
           "NSAllowsArbitraryLoads": true
         },
         "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "This app uses the camera to allow you to record videos for testimonies.",
         "NSPhotoLibraryUsageDescription": "This app needs access to your photos to let you select videos for testimonies.",
         "NSUserNotificationsUsageDescription": "This app uses notifications to keep you updated with new devotions and important updates.",
         "UIBackgroundModes": ["remote-notification"]
@@ -34,11 +33,12 @@
     "android": {
       "package": "com.arkofgod.tv",
       "permissions": [
-        "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.VIBRATE"
+      ],
+      "blockedPermissions": [
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/ark.png",
@@ -60,7 +60,6 @@
         "expo-image-picker",
         {
           "photosPermission": false,
-          "cameraPermission": "The app needs access to your camera to record videos for testimonies.",
           "androidPhotoPickerAvailable": true
         }
       ],
